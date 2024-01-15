@@ -27,7 +27,7 @@ async def orderUpdater(client,marketID,settings):
       for position in positions.positions:
         if position["market"] == marketID:
           thisPosition = position
-      availableMargin = (float(positions.margin) * float(settings["marginShare"]))
+      availableMargin = float(positions.margin) * float(settings["marginShare"])
       availableMarginBid = availableMargin
       availableMarginAsk = availableMargin
       multiple = 0
