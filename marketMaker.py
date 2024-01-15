@@ -18,8 +18,10 @@ async def orderUpdater(client,marketID,settings):
     if abs(lastUpdatePrice - midPrice)/midPrice > float(settings["refreshTolerance"])/100:
       
       nonce = await client.get_nonce() # refresh nonce
-      await cancelAllOrders(client,marketID)
-      
+      try: 
+        await cancelAllOrders(client,marketID)
+      except:
+        continue
       positions = await client.get_margin_and_positions(tools.callback)
       thisPosition = {}
       for position in positions.positions:
@@ -55,6 +57,7 @@ async def orderUpdater(client,marketID,settings):
           continue
         except Exception as error:
           print("failed to place orders",error)
+          continue
     await asyncio.sleep(1)
       
 
