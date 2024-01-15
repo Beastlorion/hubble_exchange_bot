@@ -97,6 +97,7 @@ def generateSellOrders(marketID, midPrice, settings, availableMargin, defensiveS
     qty = getQty(l,amtToTrade,marketID) * -1
     if qty == 0:
       continue
+    availableMargin = availableMargin - ((qty * roundedAskPrice)/leverage)
     order = LimitOrder.new(marketID,qty,roundedAskPrice,False,True)
     orders.append(order)
   return orders
@@ -114,6 +115,6 @@ def getQty(level, amtToTrade,marketID):
   if float(level["qty"]) < amtToTrade:
     return float(level["qty"])
   elif amtToTrade > get_minimum_quantity(marketID):
-    return Decimal(amtToTrade).quantize(Decimal(get_minimum_quantity(marketID)), rounding=ROUND_DOWN)
+    return float(Decimal(amtToTrade).quantize(Decimal(get_minimum_quantity(marketID)), rounding=ROUND_DOWN))
   else:
     return 0
