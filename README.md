@@ -1,12 +1,15 @@
-# Beastlorion's Dexalot MarketMaker
+# Beastlorion's Hubble Market Maker Bot
 
 ## Setup
 
-Assuming you are using a fresh server:
-
 ```
-pip install hubble-exchange
-pip install python-binance
+git clone https://github.com/Beastlorion/hubble_exchange_bot
+cd hubble_exchange_bot
+
+pip install hubble-exchange --include-deps
+pip install python-binance --include-deps
+sudo apt install python3-env
+
 vi .env.secret
 i
 ```
@@ -48,5 +51,5 @@ It may be necessary to press multiple times
   - Fetches all open orders for the market and cancels them
   - Calculates prices and quantities for orders
   - Places orders
-  - waits 5 seconds if successful. If unsuccessful try again faster
+  - waits 5 seconds if successful. If unsuccessful try again
 4. On shutdown cancels all open orders for the market
