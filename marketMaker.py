@@ -53,7 +53,7 @@ async def orderUpdater(client,marketID,settings):
         try:
           placed_orders = await client.place_limit_orders(limit_orders, True, tools.placeOrdersCallback)
           lastUpdatePrice = midPrice
-          await asyncio.sleep(5)
+          await asyncio.sleep(settings["refreshInterval"])
           continue
         except Exception as error:
           print("failed to place orders",error)
