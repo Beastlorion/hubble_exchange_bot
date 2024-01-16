@@ -12,7 +12,7 @@ config = {
 os.environ["HUBBLE_RPC"] = config["HUBBLE_RPC"]
 os.environ["HUBBLE_WS_RPC"] = config["HUBBLE_WS_RPC"]
 os.environ["HUBBLE_ENV"] = config["HUBBLE_ENV"]
-os.environ["PRIVATE_KEY"] = config["PRIVATE_KEY"]
+os.environ["PRIVATE_KEY"] = config[sys.argv[1] + "_PRIVATE_KEY"]
 os.environ["HUBBLE_INDEXER_API_URL"] = config["HUBBLE_INDEXER_API_URL"]
 settings = ast.literal_eval(config[sys.argv[1]])
 

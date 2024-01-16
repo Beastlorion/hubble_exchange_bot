@@ -14,10 +14,12 @@ vi .env.secret
 i
 ```
 
-paste this with your private key:
+paste this with your private key/keys:
 
 ```
-export PRIVATE_KEY=""
+export AVAX_PRIVATE_KEY=""
+export ETH_PRIVATE_KEY=""
+export SOL_PRIVATE_KEY=""
 ```
 Then press :wq to write the file and exit the editor
 
