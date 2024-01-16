@@ -37,7 +37,7 @@ async def orderUpdater(client,marketID,settings):
         availableMarginBid = availableMargin - (float(thisPosition["notionalPosition"])/float(settings["leverage"]))
         multiple = (float(thisPosition["notionalPosition"])/float(settings["leverage"]))/availableMargin
         defensiveSkewBid = multiple * 10 * settings["defensiveSkew"]/100;
-      else if (len(thisPosition)>0 and float(thisPosition["size"]) < 0):
+      elif (len(thisPosition)>0 and float(thisPosition["size"]) < 0):
         availableMarginAsk = availableMargin - (float(thisPosition["notionalPosition"])/float(settings["leverage"]))
         multiple = (float(thisPosition["notionalPosition"])/float(settings["leverage"]))/availableMargin
         defensiveSkewAsk = multiple * 10 * settings["defensiveSkew"]/100;
