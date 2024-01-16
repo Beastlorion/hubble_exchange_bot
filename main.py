@@ -22,7 +22,7 @@ marketID = None
 async def main(market):
     global client
     global marketID
-    client = HubbleClient(config["PRIVATE_KEY"])
+    client = HubbleClient(os.environ["PRIVATE_KEY"])
     
     try:
         price_feeds.startPriceFeed(market)
