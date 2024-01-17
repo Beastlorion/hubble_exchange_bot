@@ -18,11 +18,13 @@ async def orderUpdater(client,marketID,settings):
     if abs(lastUpdatePrice - midPrice)/midPrice > float(settings["refreshTolerance"])/100:
       
       nonce = await client.get_nonce() # refresh nonce
+      postions = {}
       try: 
         await cancelAllOrders(client,marketID)
-      except:
+        positions = await client.get_margin_and_positions(tools.callback)
+      except Exception as error:
+        print("error in cancel and get positions calls", error)
         continue
-      positions = await client.get_margin_and_positions(tools.callback)
       thisPosition = {}
       for position in positions.positions:
         if position["market"] == marketID:
