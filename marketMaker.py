@@ -9,6 +9,7 @@ import price_feeds
 
 async def orderUpdater(client,marketID,settings):
   lastUpdatePrice = 0
+  nonce = await client.get_nonce()
   
   while True:
     midPrice = tools.getMidPrice("0")
@@ -17,10 +18,10 @@ async def orderUpdater(client,marketID,settings):
       continue
     if abs(lastUpdatePrice - midPrice)/midPrice > float(settings["refreshTolerance"])/100:
       
-      nonce = await client.get_nonce() # refresh nonce
       postions = {}
       try: 
         await cancelAllOrders(client,marketID)
+        nonce = nonce + 1
         positions = await client.get_margin_and_positions(tools.callback)
       except Exception as error:
         print("error in cancel and get positions calls", error)
@@ -54,6 +55,7 @@ async def orderUpdater(client,marketID,settings):
       if len(limit_orders) > 0:
         try:
           placed_orders = await client.place_limit_orders(limit_orders, True, tools.placeOrdersCallback)
+          nonce = nonce + 1
           lastUpdatePrice = midPrice
           await asyncio.sleep(settings["refreshInterval"])
           continue
