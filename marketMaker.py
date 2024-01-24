@@ -20,7 +20,6 @@ async def orderUpdater(client,marketID,settings):
       
       postions = {}
       try: 
-        nonce = await client.get_nonce() # refresh nonce
         await cancelAllOrders(client,marketID)
         positions = await client.get_margin_and_positions(tools.callback)
       except Exception as error:
@@ -114,6 +113,7 @@ async def cancelAllOrders(client, marketID):
   tasks = []
   if len(open_orders)>0:
     for order in open_orders:
+      nonce = await client.get_nonce() # refresh nonce
       tasks.append(client.cancel_order_by_id(HexBytes(order.OrderId), True, tools.placeOrdersCallback))
   await asyncio.gather(*tasks)
   return
