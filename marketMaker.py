@@ -122,6 +122,6 @@ def getQty(level, amtToTrade,marketID):
   if float(level["qty"]) < amtToTrade:
     return float(level["qty"])
   elif amtToTrade > get_minimum_quantity(marketID):
-    return float(Decimal(amtToTrade).quantize(Decimal(get_minimum_quantity(marketID)), rounding=ROUND_DOWN))
+    return float(Decimal(str(amtToTrade)).quantize(Decimal(str(get_minimum_quantity(marketID))), rounding=ROUND_DOWN))
   else:
     return 0
