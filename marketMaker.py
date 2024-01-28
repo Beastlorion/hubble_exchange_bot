@@ -7,9 +7,12 @@ from dotenv import load_dotenv, dotenv_values
 import tools
 import price_feeds
 
+activeOrders = []
+
 async def orderUpdater(client,marketID,settings):
   lastUpdatePrice = 0
   nonce = await client.get_nonce()
+  global activeOrders
   
   while True:
     midPrice = tools.getMidPrice("0")
@@ -55,6 +58,14 @@ async def orderUpdater(client,marketID,settings):
         try:
           nonce = await client.get_nonce() # refresh nonce
           placed_orders = await client.place_limit_orders(limit_orders, True, tools.placeOrdersCallback,{"nonce": nonce})
+          # add successful orders to activeOrders tracking
+          for orderResponse in placed_orders:
+            if (orderResponse["success"]):
+              for order in limit_orders:
+                if order.id == orderResponse["order_id"]:
+                  activeOrders.append(order)
+                  print("appended order")
+                  
           lastUpdatePrice = midPrice
           await asyncio.sleep(settings["refreshInterval"])
           continue
@@ -109,13 +120,31 @@ def generateSellOrders(marketID, midPrice, settings, availableMargin, defensiveS
   return orders
 
 async def cancelAllOrders(client, marketID):
-  open_orders = await client.get_open_orders(marketID, tools.callback)
-  tasks = []
-  if len(open_orders)>0:
-    for order in open_orders:
+  global activeOrders
+  if len(activeOrders) > 0:
+    try:
+      nonce = await client.get_nonce()
+      cancelledOrders = await client.cancel_limit_orders(activeOrders, True, tools.callback,{"nonce": nonce})
+      print("cancelledOrders",cancelledOrders)
+      for orderResponse in cancelledOrders:
+        if (orderResponse["success"]):
+          for order in activeOrders:
+            if order.id == orderResponse["order_id"]:
+              activeOrders.remove(order)
+      return
+    except Exception as error:
+      print("there was an exception in cancel_limit_orders", error)
+      return
+      
+  else:
+    open_orders = await client.get_open_orders(marketID, tools.callback)
+    tasks = []
+    if len(open_orders)>0:
       nonce = await client.get_nonce() # refresh nonce
-      await client.cancel_order_by_id(HexBytes(order.OrderId), True, tools.placeOrdersCallback)
-  return
+      for order in open_orders:
+        tasks.append(client.cancel_order_by_id(HexBytes(order.OrderId), True, tools.placeOrdersCallback))
+    await asyncio.gather(*tasks)
+    return
       
 def getQty(level, amtToTrade,marketID):
   if float(level["qty"]) < amtToTrade:
