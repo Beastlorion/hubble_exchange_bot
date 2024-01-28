@@ -64,7 +64,6 @@ async def orderUpdater(client,marketID,settings):
               for order in limit_orders:
                 if order.id == orderResponse["order_id"]:
                   activeOrders.append(order)
-                  print("appended order")
                   
           lastUpdatePrice = midPrice
           await asyncio.sleep(settings["refreshInterval"])
