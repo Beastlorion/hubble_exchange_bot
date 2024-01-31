@@ -48,8 +48,8 @@ async def orderUpdater(client,marketID,settings):
         defensiveSkewAsk = multiple * 10 * settings["defensiveSkew"]/100;
       print("availableMarginBid: ",availableMarginBid, "  availableMarginAsk: ",availableMarginAsk, multiple)
       
-      buyOrders = generateBuyOrders(marketID,midPrice,settings,availableMarginBid,defensiveSkewBid)
-      sellOrders = generateSellOrders(marketID,midPrice,settings,availableMarginAsk,defensiveSkewAsk)
+      buyOrders = generateBuyOrders(marketID,midPrice,settings,availableMarginBid,defensiveSkewBid,float(thisPosition["size"]))
+      sellOrders = generateSellOrders(marketID,midPrice,settings,availableMarginAsk,defensiveSkewAsk,float(thisPosition["size"]))
       
       limit_orders = []
       limit_orders = buyOrders + sellOrders
@@ -83,8 +83,9 @@ async def orderUpdater(client,marketID,settings):
   # nextFundingRate = nextFundingRate["fundingRate"]
   # print("next funding rate:",nextFundingRate)
   
-def generateBuyOrders(marketID, midPrice, settings, availableMargin, defensiveSkew):
+def generateBuyOrders(marketID, midPrice, settings, availableMargin, defensiveSkew, currentSize):
   orders = []
+  amountOnOrder = 0
   leverage = float(settings["leverage"])
   for level in settings["orderLevels"]:
     l = settings["orderLevels"][level]
@@ -94,15 +95,20 @@ def generateBuyOrders(marketID, midPrice, settings, availableMargin, defensiveSk
     
     amtToTrade = (availableMargin * leverage)/roundedBidPrice
     qty = getQty(l,amtToTrade,marketID)
+    reduceOnly = False
     if qty == 0:
       continue
+    elif currentSize < 0 and qty * -1 > currentSize + amountOnOrder:
+      reduceOnly = True
+      amountOnOrder = amountOnOrder + qty
     availableMargin = availableMargin - ((qty * roundedBidPrice)/leverage)
-    order = LimitOrder.new(marketID,qty,roundedBidPrice,False,True)
+    order = LimitOrder.new(marketID,qty,roundedBidPrice,reduceOnly,True)
     orders.append(order)
   return orders
   
-def generateSellOrders(marketID, midPrice, settings, availableMargin, defensiveSkew):
+def generateSellOrders(marketID, midPrice, settings, availableMargin, defensiveSkew, currentSize):
   orders = []
+  amountOnOrder = 0
   leverage = float(settings["leverage"])
   for level in settings["orderLevels"]:
     l = settings["orderLevels"][level]
@@ -111,10 +117,14 @@ def generateSellOrders(marketID, midPrice, settings, availableMargin, defensiveS
     roundedAskPrice = round(askPrice,get_price_precision(marketID))
     amtToTrade = (availableMargin * leverage)/roundedAskPrice
     qty = getQty(l,amtToTrade,marketID) * -1
+    reduceOnly = False
     if qty == 0:
       continue
+    elif currentSize > 0 and qty * -1 < currentSize + amountOnOrder:
+      reduceOnly = True
+      amountOnOrder = amountOnOrder + qty
     availableMargin = availableMargin - ((qty * roundedAskPrice)/leverage)
-    order = LimitOrder.new(marketID,qty,roundedAskPrice,False,True)
+    order = LimitOrder.new(marketID,qty,roundedAskPrice,reduceOnly,True)
     orders.append(order)
   return orders
 
