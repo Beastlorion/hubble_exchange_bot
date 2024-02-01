@@ -136,7 +136,7 @@ async def cancelAllOrders(client, marketID):
       cancelledOrders = await client.cancel_limit_orders(activeOrders, True, tools.callback,{"nonce": nonce})
       print("cancelledOrders",cancelledOrders)
       for orderResponse in cancelledOrders:
-        if (orderResponse["success"]):
+        if (orderResponse["success"] or orderResponse["error"] == "Filled"):
           for order in activeOrders:
             if order.id == orderResponse["order_id"]:
               activeOrders.remove(order)
