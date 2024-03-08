@@ -3,15 +3,20 @@
 ## Setup
 
 ```
-git clone https://github.com/Beastlorion/hubble_exchange_bot
-cd hubble_exchange_bot
+git clone https://github.com/hubble-exchange/beast_mm_bot
+cd beast_mm_bot
 
-pip install hubble-exchange --include-deps
-pip install python-binance --include-deps
+# install virtualenv if not already installed
 sudo apt install python3-env
 
+# create a new virtual environment
+python3.10 -m venv venv && source venv/bin/activate
+
+pip install hubble-exchange==0.9.0rc6
+pip install python-binance
+pip install python-dotenv
+
 vi .env.secret
-i
 ```
 
 paste this with your private key/keys:

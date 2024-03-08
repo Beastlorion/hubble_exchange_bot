@@ -9,10 +9,15 @@ import price_feeds
 
 activeOrders = []
 
+hubble_client: HubbleClient = None
 
-async def orderUpdater(client, marketID, settings):
+EXPIRY_DURATION = 2
+
+
+async def orderUpdater(client: HubbleClient, marketID, settings):
+    global hubble_client
+    hubble_client = client
     lastUpdatePrice = 0
-    nonce = await client.get_nonce()
     global activeOrders
 
     while True:
@@ -20,96 +25,100 @@ async def orderUpdater(client, marketID, settings):
         if midPrice == 0:
             await asyncio.sleep(2)
             continue
-        if (
-            abs(lastUpdatePrice - midPrice) / midPrice
-            > float(settings["refreshTolerance"]) / 100
-        ):
+        # if (
+        #     abs(lastUpdatePrice - midPrice) / midPrice
+        #     > float(settings["refreshTolerance"]) / 100
+        # ):
 
-            postions = {}
+        postions = {}
+        try:
+            # await cancelAllOrders(client, marketID)
+            positions = await client.get_margin_and_positions(tools.callback)
+            # print('positions:', positions)
+        except Exception as error:
+            print(error.with_traceback())
+            print("error in cancel and get positions calls", error)
+            asyncio.sleep(settings["refreshInterval"])
+            continue
+        thisPosition = {}
+        for position in positions.positions:
+            if position["market"] == marketID:
+                thisPosition = position
+        availableMargin = float(positions.margin) * float(settings["marginShare"])
+        availableMarginBid = availableMargin
+        availableMarginAsk = availableMargin
+        multiple = 0
+        defensiveSkewBid = 0
+        defensiveSkewAsk = 0
+        if len(thisPosition) > 0 and float(thisPosition["size"]) > 0:
+            availableMarginBid = availableMargin - (
+                float(thisPosition["notionalPosition"])
+                / float(settings["leverage"])
+            )
+            multiple = (
+                float(thisPosition["notionalPosition"])
+                / float(settings["leverage"])
+            ) / availableMargin
+            defensiveSkewBid = multiple * 10 * settings["defensiveSkew"] / 100
+        elif len(thisPosition) > 0 and float(thisPosition["size"]) < 0:
+            availableMarginAsk = availableMargin - (
+                float(thisPosition["notionalPosition"])
+                / float(settings["leverage"])
+            )
+            multiple = (
+                float(thisPosition["notionalPosition"])
+                / float(settings["leverage"])
+            ) / availableMargin
+            defensiveSkewAsk = multiple * 10 * settings["defensiveSkew"] / 100
+        print(
+            "availableMarginBid: ",
+            availableMarginBid,
+            "  availableMarginAsk: ",
+            availableMarginAsk,
+            multiple,
+        )
+
+        buyOrders = generateBuyOrders(
+            marketID,
+            midPrice,
+            settings,
+            availableMarginBid,
+            defensiveSkewBid,
+            float(thisPosition["size"]),
+        )
+        sellOrders = generateSellOrders(
+            marketID,
+            midPrice,
+            settings,
+            availableMarginAsk,
+            defensiveSkewAsk,
+            float(thisPosition["size"]),
+        )
+
+        signed_orders = []
+        signed_orders = buyOrders + sellOrders
+
+        if len(signed_orders) > 0:
             try:
-                await cancelAllOrders(client, marketID)
-                positions = await client.get_margin_and_positions(tools.callback)
+                # nonce = await client.get_nonce()  # refresh nonce
+                placed_orders = await client.place_signed_orders(signed_orders, tools.placeOrdersCallback)
+                # placed_orders = await client.place_limit_orders(
+                #     signed_orders, True, tools.placeOrdersCallback, {"nonce": nonce}
+                # )
+                # add successful orders to activeOrders tracking
+                # for orderResponse in placed_orders:
+                #     if orderResponse["success"]:
+                #         for order in limit_orders:
+                #             if order.id == orderResponse["order_id"]:
+                #                 activeOrders.append(order)
+
+                lastUpdatePrice = midPrice
+                # continue
             except Exception as error:
-                print("error in cancel and get positions calls", error)
-                continue
-            thisPosition = {}
-            for position in positions.positions:
-                if position["market"] == marketID:
-                    thisPosition = position
-            availableMargin = float(positions.margin) * float(settings["marginShare"])
-            availableMarginBid = availableMargin
-            availableMarginAsk = availableMargin
-            multiple = 0
-            defensiveSkewBid = 0
-            defensiveSkewAsk = 0
-            if len(thisPosition) > 0 and float(thisPosition["size"]) > 0:
-                availableMarginBid = availableMargin - (
-                    float(thisPosition["notionalPosition"])
-                    / float(settings["leverage"])
-                )
-                multiple = (
-                    float(thisPosition["notionalPosition"])
-                    / float(settings["leverage"])
-                ) / availableMargin
-                defensiveSkewBid = multiple * 10 * settings["defensiveSkew"] / 100
-            elif len(thisPosition) > 0 and float(thisPosition["size"]) < 0:
-                availableMarginAsk = availableMargin - (
-                    float(thisPosition["notionalPosition"])
-                    / float(settings["leverage"])
-                )
-                multiple = (
-                    float(thisPosition["notionalPosition"])
-                    / float(settings["leverage"])
-                ) / availableMargin
-                defensiveSkewAsk = multiple * 10 * settings["defensiveSkew"] / 100
-            print(
-                "availableMarginBid: ",
-                availableMarginBid,
-                "  availableMarginAsk: ",
-                availableMarginAsk,
-                multiple,
-            )
+                print("failed to place orders", error)
+                # continue
 
-            buyOrders = generateBuyOrders(
-                marketID,
-                midPrice,
-                settings,
-                availableMarginBid,
-                defensiveSkewBid,
-                float(thisPosition["size"]),
-            )
-            sellOrders = generateSellOrders(
-                marketID,
-                midPrice,
-                settings,
-                availableMarginAsk,
-                defensiveSkewAsk,
-                float(thisPosition["size"]),
-            )
-
-            limit_orders = []
-            limit_orders = buyOrders + sellOrders
-
-            if len(limit_orders) > 0:
-                try:
-                    nonce = await client.get_nonce()  # refresh nonce
-                    placed_orders = await client.place_limit_orders(
-                        limit_orders, True, tools.placeOrdersCallback, {"nonce": nonce}
-                    )
-                    # add successful orders to activeOrders tracking
-                    for orderResponse in placed_orders:
-                        if orderResponse["success"]:
-                            for order in limit_orders:
-                                if order.id == orderResponse["order_id"]:
-                                    activeOrders.append(order)
-
-                    lastUpdatePrice = midPrice
-                    await asyncio.sleep(settings["refreshInterval"])
-                    continue
-                except Exception as error:
-                    print("failed to place orders", error)
-                    continue
-        await asyncio.sleep(1)
+        await asyncio.sleep(settings["refreshInterval"])
 
     # fundingRate = await client.get_funding_rate(marketID,time.time())
     # fundingRate = fundingRate["fundingRate"]
@@ -141,7 +150,9 @@ def generateBuyOrders(
             reduceOnly = True
             amountOnOrder = amountOnOrder + qty
         availableMargin = availableMargin - ((qty * roundedBidPrice) / leverage)
-        order = LimitOrder.new(marketID, qty, roundedBidPrice, reduceOnly, True)
+        # order = LimitOrder.new(marketID, qty, roundedBidPrice, reduceOnly, True)
+        order = hubble_client.prepare_signed_order(marketID, qty, roundedBidPrice, reduceOnly, EXPIRY_DURATION)
+
         orders.append(order)
     return orders
 
@@ -166,7 +177,8 @@ def generateSellOrders(
             reduceOnly = True
             amountOnOrder = amountOnOrder + qty
         availableMargin = availableMargin - ((qty * roundedAskPrice) / leverage)
-        order = LimitOrder.new(marketID, qty, roundedAskPrice, reduceOnly, True)
+        # order = LimitOrder.new(marketID, qty, roundedAskPrice, reduceOnly, True)
+        order = hubble_client.prepare_signed_order(marketID, qty, roundedAskPrice, reduceOnly, EXPIRY_DURATION)
         orders.append(order)
     return orders
 

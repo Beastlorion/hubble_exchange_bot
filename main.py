@@ -23,6 +23,11 @@ async def main(market):
     global client
     global marketID
     client = HubbleClient(os.environ["PRIVATE_KEY"])
+    # print(client.trader_address)
+
+
+    # positions = await client.get_margin_and_positions(tools.callback)
+    # print('positions:', positions)
     
     try:
         price_feeds.startPriceFeed(market)
