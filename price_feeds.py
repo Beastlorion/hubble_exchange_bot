@@ -1,25 +1,12 @@
-import time, ast, asyncio
-import urllib.request
+import asyncio
+import json
+
+import websockets
 from binance import AsyncClient, BinanceSocketManager
+
 import tools
 
-import websocket
-
-api_key = ""
-api_secret = ""
-usdt = 0
-priceUSD = 0
-
-
-def start_price_feed(market):
-    usdtUpdaterTask = asyncio.create_task(usdtUpdater())
-    tickerTask = asyncio.create_task(start_binance_spot_feed(market))
-
-
-async def usdtUpdater():
-    while 1:
-        await updateUSDT()
-        await asyncio.sleep(1)
+mid_price = 0
 
 
 async def start_binance_spot_feed(market):
@@ -34,26 +21,41 @@ async def start_binance_spot_feed(market):
         while True:
             res = await tscm.recv()
             priceUsdt = float(res["p"])
-            if usdt:
-                global priceUSD
-                priceUSD = priceUsdt * usdt
-                # print("USD PRICE:",priceUSD)
+            global mid_price
+            mid_price = priceUsdt
     await client.close_connection()
 
 
-async def updateUSDT():
-    try:
-        usdtResult = urllib.request.urlopen(
-            "https://api.kraken.com/0/public/Ticker?pair=USDTUSD"
-        ).read()
-        usdtResult = ast.literal_eval(usdtResult.decode("utf-8"))
-        global usdt
-        usdt = (
-            float(usdtResult["result"]["USDTZUSD"]["a"][0])
-            + float(usdtResult["result"]["USDTZUSD"]["b"][0])
-        ) / 2
-    except:
-        print("error getting usdt price")
+async def start_binance_futures_feed(market):
+    symbol = tools.getSymbolFromName(market) + "USDT"
+    print(f"Starting Binance Futures price feed for {symbol}...")
+    # ws_url = f"wss://fstream.binance.com/ws/{symbol.lower()}@depth@100ms"
+    ws_url = f"wss://fstream.binance.com/ws/{symbol.lower()}@bookTicker"
 
+    retry_delay = 5  # Initial retry delay in seconds
+    max_retries = 5  # Maximum number of retries
+    attempt_count = 0  # Attempt counter
 
-# def getTickerPrice():
+    while attempt_count < max_retries:
+        try:
+            async with websockets.connect(ws_url) as websocket:
+                print("Connected to the server.")
+                attempt_count = 0  # Reset attempt counter on successful connection
+                
+                while True:
+                    message = await websocket.recv()
+                    data = json.loads(message)
+                    global mid_price
+                    mid_price = round((float(data["b"]) + float(data["a"])) / 2, 5)
+                    # print(f"Mid price: {mid_price}")
+
+        except Exception as e:
+            print(f"Connection error: {e}")
+            attempt_count += 1
+            print(f"Attempting to reconnect in {retry_delay} seconds... (Attempt {attempt_count}/{max_retries})")
+            await asyncio.sleep(retry_delay)
+            retry_delay *= 2  # Exponential backoff
+
+        if attempt_count >= max_retries:
+            print("Maximum retry attempts reached. Exiting.")
+            break

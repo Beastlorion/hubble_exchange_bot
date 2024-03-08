@@ -12,9 +12,7 @@ sudo apt install python3-env
 # create a new virtual environment
 python3.10 -m venv venv && source venv/bin/activate
 
-pip install hubble-exchange==0.9.0rc6
-pip install python-binance
-pip install python-dotenv
+pip install hubble-exchange==0.9.0rc6 python-binance python-dotenv
 
 vi .env.secret
 ```

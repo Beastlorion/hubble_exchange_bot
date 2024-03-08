@@ -4,17 +4,19 @@ from dotenv import load_dotenv, dotenv_values
 import tools
 import price_feeds
 import marketMaker
+import config
 
-config = {
+env = {
     **dotenv_values(".env.shared"),
     **dotenv_values(".env.secret")
 }
-os.environ["HUBBLE_RPC"] = config["HUBBLE_RPC"]
-os.environ["HUBBLE_WS_RPC"] = config["HUBBLE_WS_RPC"]
-os.environ["HUBBLE_ENV"] = config["HUBBLE_ENV"]
-os.environ["PRIVATE_KEY"] = config[sys.argv[1] + "_PRIVATE_KEY"]
-os.environ["HUBBLE_INDEXER_API_URL"] = config["HUBBLE_INDEXER_API_URL"]
-settings = ast.literal_eval(config[sys.argv[1]])
+os.environ["HUBBLE_RPC"] = env["HUBBLE_RPC"]
+os.environ["HUBBLE_WS_RPC"] = env["HUBBLE_WS_RPC"]
+os.environ["HUBBLE_ENV"] = env["HUBBLE_ENV"]
+os.environ["PRIVATE_KEY"] = env[sys.argv[1] + "_PRIVATE_KEY"]
+os.environ["HUBBLE_INDEXER_API_URL"] = env["HUBBLE_INDEXER_API_URL"]
+# settings = ast.literal_eval(env[sys.argv[1]])
+settings = getattr(config, sys.argv[1])
 
 client = {}
 marketID = None
@@ -23,22 +25,20 @@ async def main(market):
     global client
     global marketID
     client = HubbleClient(os.environ["PRIVATE_KEY"])
-    # print(client.trader_address)
 
-
-    # positions = await client.get_margin_and_positions(tools.callback)
-    # print('positions:', positions)
-    
     try:
-        price_feeds.startPriceFeed(market)
+        if settings["priceFeed"] == "binance-futures":
+            asyncio.create_task(price_feeds.start_binance_futures_feed(market))
+        else:
+            asyncio.create_task(price_feeds.start_binance_spot_feed(market))
 
         # # get a dict of all market ids and names - for example {0: "ETH-Perp", 1: "AVAX-Perp"}
         markets = await client.get_markets()
-        marketID = tools.getKey(markets,settings["name"])
+        marketID = tools.getKey(markets, settings["name"])
         print(market,marketID)
         
         await asyncio.sleep(2)
-        await marketMaker.orderUpdater(client,marketID,settings)
+        await marketMaker.orderUpdater(client, marketID, settings)
         
     except asyncio.CancelledError:
         print("asyncio.CancelledError")

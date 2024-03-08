@@ -1,11 +1,13 @@
-import sys, os, asyncio, time
+import asyncio
+import time
 from decimal import *
+
 from hexbytes import HexBytes
-from hubble_exchange import HubbleClient, OrderBookDepthResponse, LimitOrder, IOCOrder
+from hubble_exchange import (HubbleClient, IOCOrder, LimitOrder,
+                             OrderBookDepthResponse)
 from hubble_exchange.constants import get_minimum_quantity, get_price_precision
-from dotenv import load_dotenv, dotenv_values
+
 import tools
-import price_feeds
 
 activeOrders = []
 
@@ -21,8 +23,8 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
     global activeOrders
 
     while True:
-        midPrice = tools.getMidPrice("0")
-        if midPrice == 0:
+        mid_price = tools.get_mid_price()
+        if mid_price == 0:
             await asyncio.sleep(2)
             continue
         # if (
@@ -80,7 +82,7 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
 
         buyOrders = generateBuyOrders(
             marketID,
-            midPrice,
+            mid_price,
             settings,
             availableMarginBid,
             defensiveSkewBid,
@@ -88,7 +90,7 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
         )
         sellOrders = generateSellOrders(
             marketID,
-            midPrice,
+            mid_price,
             settings,
             availableMarginAsk,
             defensiveSkewAsk,
@@ -100,23 +102,11 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
 
         if len(signed_orders) > 0:
             try:
-                # nonce = await client.get_nonce()  # refresh nonce
                 placed_orders = await client.place_signed_orders(signed_orders, tools.placeOrdersCallback)
-                # placed_orders = await client.place_limit_orders(
-                #     signed_orders, True, tools.placeOrdersCallback, {"nonce": nonce}
-                # )
-                # add successful orders to activeOrders tracking
-                # for orderResponse in placed_orders:
-                #     if orderResponse["success"]:
-                #         for order in limit_orders:
-                #             if order.id == orderResponse["order_id"]:
-                #                 activeOrders.append(order)
 
-                lastUpdatePrice = midPrice
-                # continue
+                lastUpdatePrice = mid_price
             except Exception as error:
                 print("failed to place orders", error)
-                # continue
 
         await asyncio.sleep(settings["refreshInterval"])
 

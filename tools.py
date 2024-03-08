@@ -8,8 +8,8 @@ def getKey(d,v):
 def getSymbolFromName(market):
   return market.split('-')[0]
 
-def getMidPrice(nextFundingRate):
-  return price_feeds.priceUSD
+def get_mid_price():
+  return price_feeds.mid_price
 
 async def callback(response):
   # print(f"Received response: {response}")
