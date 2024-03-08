@@ -65,13 +65,7 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
                 / float(settings["leverage"])
             ) / availableMargin
             defensiveSkewAsk = multiple * 10 * settings["defensiveSkew"] / 100
-        print(
-            "availableMarginBid: ",
-            availableMarginBid,
-            "  availableMarginAsk: ",
-            availableMarginAsk,
-            multiple,
-        )
+        print(f"availableMarginBid: {availableMarginBid} availableMarginAsk: {availableMarginAsk} multiple: {multiple}"),
 
         buyOrders = generateBuyOrders(
             marketID,
