@@ -84,7 +84,7 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
             settings,
             availableMarginBid,
             defensiveSkewBid,
-            float(thisPosition["size"]),
+            float(thisPosition.get("size", 0)),
         )
         sellOrders = generateSellOrders(
             marketID,
@@ -92,7 +92,7 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
             settings,
             availableMarginAsk,
             defensiveSkewAsk,
-            float(thisPosition["size"]),
+            float(thisPosition.get("size", 0)),
         )
 
         signed_orders = []
