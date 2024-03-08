@@ -18,11 +18,9 @@ os.environ["HUBBLE_INDEXER_API_URL"] = env["HUBBLE_INDEXER_API_URL"]
 # settings = ast.literal_eval(env[sys.argv[1]])
 settings = getattr(config, sys.argv[1])
 
-client = {}
 marketID = None
 
 async def main(market):
-    global client
     global marketID
     client = HubbleClient(os.environ["PRIVATE_KEY"])
 
@@ -31,6 +29,8 @@ async def main(market):
             asyncio.create_task(price_feeds.start_binance_futures_feed(market))
         else:
             asyncio.create_task(price_feeds.start_binance_spot_feed(market))
+
+        asyncio.create_task(marketMaker.start_positions_feed(client, settings['orderExpiry']))
 
         # # get a dict of all market ids and names - for example {0: "ETH-Perp", 1: "AVAX-Perp"}
         markets = await client.get_markets()

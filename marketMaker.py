@@ -13,7 +13,7 @@ activeOrders = []
 
 hubble_client: HubbleClient = None
 
-EXPIRY_DURATION = 2
+positions = None
 
 
 async def orderUpdater(client: HubbleClient, marketID, settings):
@@ -21,6 +21,8 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
     hubble_client = client
     lastUpdatePrice = 0
     global activeOrders
+
+    expiry_duration = settings["orderExpiry"]
 
     while True:
         mid_price = tools.get_mid_price()
@@ -32,17 +34,8 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
         #     > float(settings["refreshTolerance"]) / 100
         # ):
 
-        postions = {}
-        try:
-            # await cancelAllOrders(client, marketID)
-            positions = await client.get_margin_and_positions(tools.callback)
-            # print('positions:', positions)
-        except Exception as error:
-            print(error.with_traceback())
-            print("error in cancel and get positions calls", error)
-            asyncio.sleep(settings["refreshInterval"])
-            continue
         thisPosition = {}
+        global positions
         for position in positions.positions:
             if position["market"] == marketID:
                 thisPosition = position
@@ -87,6 +80,7 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
             availableMarginBid,
             defensiveSkewBid,
             float(thisPosition.get("size", 0)),
+            expiry_duration
         )
         sellOrders = generateSellOrders(
             marketID,
@@ -95,6 +89,7 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
             availableMarginAsk,
             defensiveSkewAsk,
             float(thisPosition.get("size", 0)),
+            expiry_duration
         )
 
         signed_orders = []
@@ -108,7 +103,12 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
             except Exception as error:
                 print("failed to place orders", error)
 
-        await asyncio.sleep(settings["refreshInterval"])
+        # aim to place the order exactly at the start of the second
+        now = time.time()
+        next_run = expiry_duration - (now % expiry_duration)
+        if next_run < 0:
+            next_run += expiry_duration
+        await asyncio.sleep(next_run)
 
     # fundingRate = await client.get_funding_rate(marketID,time.time())
     # fundingRate = fundingRate["fundingRate"]
@@ -120,7 +120,7 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
 
 
 def generateBuyOrders(
-    marketID, midPrice, settings, availableMargin, defensiveSkew, currentSize
+    marketID, midPrice, settings, availableMargin, defensiveSkew, currentSize, expiry_duration
 ):
     orders = []
     amountOnOrder = 0
@@ -141,14 +141,14 @@ def generateBuyOrders(
             amountOnOrder = amountOnOrder + qty
         availableMargin = availableMargin - ((qty * roundedBidPrice) / leverage)
         # order = LimitOrder.new(marketID, qty, roundedBidPrice, reduceOnly, True)
-        order = hubble_client.prepare_signed_order(marketID, qty, roundedBidPrice, reduceOnly, EXPIRY_DURATION)
+        order = hubble_client.prepare_signed_order(marketID, qty, roundedBidPrice, reduceOnly, expiry_duration)
 
         orders.append(order)
     return orders
 
 
 def generateSellOrders(
-    marketID, midPrice, settings, availableMargin, defensiveSkew, currentSize
+    marketID, midPrice, settings, availableMargin, defensiveSkew, currentSize, expiry_duration
 ):
     orders = []
     amountOnOrder = 0
@@ -168,9 +168,18 @@ def generateSellOrders(
             amountOnOrder = amountOnOrder + qty
         availableMargin = availableMargin - ((qty * roundedAskPrice) / leverage)
         # order = LimitOrder.new(marketID, qty, roundedAskPrice, reduceOnly, True)
-        order = hubble_client.prepare_signed_order(marketID, qty, roundedAskPrice, reduceOnly, EXPIRY_DURATION)
+        order = hubble_client.prepare_signed_order(marketID, qty, roundedAskPrice, reduceOnly, expiry_duration)
         orders.append(order)
     return orders
+
+
+async def start_positions_feed(client: HubbleClient, wait_duration=2):
+    while True:
+        global positions
+        positions = await client.get_margin_and_positions(tools.callback)
+        now = time.time()
+        next_run = wait_duration - (now % wait_duration)
+        await asyncio.sleep(next_run)
 
 
 async def cancelAllOrders(client, marketID):

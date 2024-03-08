@@ -3,7 +3,7 @@ ETH = {
     "marginShare": 0.33,
     "leverage": 5,
     "refreshTolerance": 0.03,
-    "refreshInterval": 0.1,
+    "orderExpiry": 0.1,
     "defensiveSkew": 0.01,
     "priceFeed": "binance-futures",
     "orderLevels": {
@@ -20,13 +20,13 @@ AVAX = {
     "marginShare": 1,
     "leverage": 2,
     "refreshTolerance": 0.03,
-    "refreshInterval": 2,
+    "orderExpiry": 2,
     "defensiveSkew": 0.01,
     "priceFeed": "binance-spot",
     "orderLevels": {
         "1": {
-            "spread": 0.02,
-            "qty": 3,
+            "spread": 0.003,
+            "qty": 7,
             "refreshTolerance": 0
         }
     }
@@ -37,7 +37,7 @@ SOL = {
     "marginShare": 0.33,
     "leverage": 5,
     "refreshTolerance": 0.03,
-    "refreshInterval": 0.1,
+    "orderExpiry": 0.1,
     "defensiveSkew": 0.01,
     "priceFeed": "binance-futures",
     "orderLevels": {
