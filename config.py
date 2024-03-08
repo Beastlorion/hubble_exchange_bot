@@ -26,6 +26,11 @@ AVAX = {
     "orderLevels": {
         "1": {
             "spread": 0.003,
+            "qty": 4,
+            "refreshTolerance": 0
+        },
+        "2": {
+            "spread": 0.005,
             "qty": 7,
             "refreshTolerance": 0
         }

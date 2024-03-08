@@ -1,13 +1,27 @@
 import asyncio
 import json
+import os
 
 import websockets
 from binance import AsyncClient, BinanceSocketManager
 
+from hubble_exchange import HubbleClient, OrderBookDepthUpdateResponse
+
 import tools
 
 mid_price = 0
+hubble_prices = [float('inf'), 0]  # [best_ask, best_bid]
 
+
+async def start_hubble_feed(client: HubbleClient, market):
+    async def callback(ws, response: OrderBookDepthUpdateResponse):
+        global hubble_prices
+        if len(response.bids) > 0 and float(response.bids[-1][0]) > hubble_prices[1]:
+            hubble_prices[1] = float(response.bids[-1][0])
+        if len(response.asks) > 0 and float(response.asks[0][0]) < hubble_prices[0]:
+            hubble_prices[0] = float(response.asks[0][0])
+
+    await client.subscribe_to_order_book_depth_with_freq(market, callback, "500ms")
 
 async def start_binance_spot_feed(market):
     symbol = tools.getSymbolFromName(market) + "USDT"
@@ -41,7 +55,7 @@ async def start_binance_futures_feed(market):
             async with websockets.connect(ws_url) as websocket:
                 print("Connected to the server.")
                 attempt_count = 0  # Reset attempt counter on successful connection
-                
+
                 while True:
                     message = await websocket.recv()
                     data = json.loads(message)

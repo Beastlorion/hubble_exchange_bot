@@ -30,16 +30,17 @@ async def main(market):
         else:
             asyncio.create_task(price_feeds.start_binance_spot_feed(market))
 
+        markets = await client.get_markets()
+        marketID = tools.getKey(markets, settings["name"])
+        asyncio.create_task(price_feeds.start_hubble_feed(client, marketID))
         asyncio.create_task(marketMaker.start_positions_feed(client, settings['orderExpiry']))
 
         # # get a dict of all market ids and names - for example {0: "ETH-Perp", 1: "AVAX-Perp"}
-        markets = await client.get_markets()
-        marketID = tools.getKey(markets, settings["name"])
         print(market,marketID)
-        
+
         await asyncio.sleep(2)
         await marketMaker.orderUpdater(client, marketID, settings)
-        
+
     except asyncio.CancelledError:
         print("asyncio.CancelledError")
     finally:

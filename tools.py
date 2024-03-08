@@ -11,6 +11,9 @@ def getSymbolFromName(market):
 def get_mid_price():
   return price_feeds.mid_price
 
+def get_hubble_prices():
+  return price_feeds.hubble_prices
+
 async def callback(response):
   # print(f"Received response: {response}")
   return response

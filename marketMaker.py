@@ -124,6 +124,10 @@ def generateBuyOrders(
         spread = float(l["spread"]) / 100 + defensiveSkew
         bidPrice = midPrice * (1 - spread)
         roundedBidPrice = round(bidPrice, get_price_precision(marketID))
+        best_ask_on_hubble = tools.get_hubble_prices()[0]
+        if roundedBidPrice >= best_ask_on_hubble:
+            bidPrice = best_ask_on_hubble * (1 - spread)
+            roundedBidPrice = round(bidPrice, get_price_precision(marketID))
 
         amtToTrade = (availableMargin * leverage) / roundedBidPrice
         qty = getQty(l, amtToTrade, marketID)
@@ -152,6 +156,11 @@ def generateSellOrders(
         spread = float(l["spread"]) / 100 + defensiveSkew
         askPrice = midPrice * (1 + spread)
         roundedAskPrice = round(askPrice, get_price_precision(marketID))
+        best_bid_on_hubble = tools.get_hubble_prices()[1]
+        if roundedAskPrice <= best_bid_on_hubble:
+            askPrice = best_bid_on_hubble * (1 + spread)
+            roundedAskPrice = round(askPrice, get_price_precision(marketID))
+
         amtToTrade = (availableMargin * leverage) / roundedAskPrice
         qty = getQty(l, amtToTrade, marketID) * -1
         reduceOnly = False
