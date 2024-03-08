@@ -17,11 +17,3 @@ def get_hubble_prices():
 async def callback(response):
   # print(f"Received response: {response}")
   return response
-
-async def placeOrdersCallback(response):
-  for order in response:
-    if order['success'] == True:
-      print(f"{order['order_id']}: ✅")
-    else:
-      print(f"{order['order_id']}: ❌; {order['error']}")
-  return response

@@ -6,6 +6,7 @@ from hexbytes import HexBytes
 from hubble_exchange import (HubbleClient, IOCOrder, LimitOrder,
                              OrderBookDepthResponse)
 from hubble_exchange.constants import get_minimum_quantity, get_price_precision
+from hubble_exchange.utils import int_to_scaled_float
 
 import tools
 
@@ -91,7 +92,15 @@ async def orderUpdater(client: HubbleClient, marketID, settings):
 
         if len(signed_orders) > 0:
             try:
-                placed_orders = await client.place_signed_orders(signed_orders, tools.placeOrdersCallback)
+                placed_orders = await client.place_signed_orders(signed_orders, tools.callback)
+                for idx, order in enumerate(placed_orders):
+                    price = int_to_scaled_float(signed_orders[idx].price, 6)
+                    quantity = int_to_scaled_float(signed_orders[idx].base_asset_quantity, 18)
+                    if order['success'] == True:
+                        print(f"{order['order_id']}: {quantity}@{price} : ✅")
+                    else:
+                        print(f"{order['order_id']}: {quantity}@{price} : ❌; {order['error']}")
+
 
                 lastUpdatePrice = mid_price
             except Exception as error:
