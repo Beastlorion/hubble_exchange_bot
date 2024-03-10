@@ -133,8 +133,9 @@ def generateBuyOrders(
         spread = float(l["spread"]) / 100 + defensiveSkew
         bidPrice = midPrice * (1 - spread)
         roundedBidPrice = round(bidPrice, get_price_precision(marketID))
+        best_ask_on_hubble = tools.get_hubble_prices()[0]
         if settings.get('avoidCrossing', False):
-            best_ask_on_hubble = tools.get_hubble_prices()[0]
+            #shift the spread to avoid crossing
             if roundedBidPrice >= best_ask_on_hubble:
                 bidPrice = best_ask_on_hubble * (1 - spread)
                 roundedBidPrice = round(bidPrice, get_price_precision(marketID))
