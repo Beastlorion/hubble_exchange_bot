@@ -20,31 +20,46 @@ settings = getattr(config, sys.argv[1])
 
 marketID = None
 
+restart_needed = asyncio.Event()
+
+async def monitor_restart():
+    await restart_needed.wait()
+    print("Restarting application due to a task exception.")
+    # Implement your restart logic here, like exiting with a specific status code
+    sys.exit(1)
+
+
 async def main(market):
     global marketID
     client = HubbleClient(os.environ["PRIVATE_KEY"])
+    monitor_task = asyncio.create_task(monitor_restart())
 
     try:
         if settings["priceFeed"] == "binance-futures":
-            asyncio.create_task(price_feeds.start_binance_futures_feed(market))
+            asyncio.create_task(price_feeds.start_binance_futures_feed(market, restart_needed))
         else:
             asyncio.create_task(price_feeds.start_binance_spot_feed(market))
 
         markets = await client.get_markets()
         marketID = tools.getKey(markets, settings["name"])
-        asyncio.create_task(price_feeds.start_hubble_feed(client, marketID))
-        asyncio.create_task(marketMaker.start_positions_feed(client, settings['orderExpiry']))
+        asyncio.create_task(price_feeds.start_hubble_feed(client, marketID, restart_needed))
+        asyncio.create_task(marketMaker.start_positions_feed(client, settings['orderExpiry'], restart_needed))
 
         # # get a dict of all market ids and names - for example {0: "ETH-Perp", 1: "AVAX-Perp"}
         print(market,marketID)
 
         await asyncio.sleep(2)
-        await marketMaker.orderUpdater(client, marketID, settings)
+        try:
+            await marketMaker.orderUpdater(client, marketID, settings)
+        except Exception as e:
+            print("Error in orderUpdater", e)
+            restart_needed.set()
+            return
+        
+        await monitor_task
 
     except asyncio.CancelledError:
         print("asyncio.CancelledError")
-    finally:
-        await marketMaker.cancelAllOrders(client, marketID)
 
 # Start and run until complete
 loop = asyncio.get_event_loop()

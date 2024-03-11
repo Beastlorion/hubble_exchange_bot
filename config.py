@@ -6,6 +6,7 @@ ETH = {
     "orderExpiry": 2,
     "defensiveSkew": 0.01,
     "priceFeed": "binance-futures",
+    "avoidCrossing": True,
     "orderLevels": {
         "1": {
             "spread": 0.05,
@@ -23,17 +24,18 @@ AVAX = {
     "orderExpiry": 2,
     "defensiveSkew": 0.01,
     "priceFeed": "binance-futures",
+    "avoidCrossing": True,
     "orderLevels": {
         "1": {
             "spread": 0.003,
-            "qty": 4,
+            "qty": 6,
             "refreshTolerance": 0
         },
-        "2": {
-            "spread": 0.005,
-            "qty": 7,
-            "refreshTolerance": 0
-        }
+        # "2": {
+        #     "spread": 0.005,
+        #     "qty": 1,
+        #     "refreshTolerance": 0
+        # }
     }
 }
 
@@ -45,6 +47,7 @@ SOL = {
     "orderExpiry": 2,
     "defensiveSkew": 0.01,
     "priceFeed": "binance-futures",
+    "avoidCrossing": True,
     "orderLevels": {
         "1": {
             "spread": 0.05,

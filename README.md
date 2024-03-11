@@ -48,6 +48,20 @@ python3 main.py AVAX
 To stop press ctr+c
 It may be necessary to press multiple times
 
+
+## Run using PM2
+
+```
+sudo apt install nodejs
+sudo apt install npm
+sudo npm install pm2@latest -g
+```
+
+
+```
+pm2 start ecosystem.config.js --only avax
+```
+
 ## Flow
 
 1. Starts Binance price feed for asset/usdt

@@ -13,7 +13,7 @@ mid_price = 0
 hubble_prices = [float('inf'), 0]  # [best_ask, best_bid]
 
 
-async def start_hubble_feed(client: HubbleClient, market):
+async def start_hubble_feed(client: HubbleClient, market, restart_needed):
     async def callback(ws, response: OrderBookDepthUpdateResponse):
         global hubble_prices
         if len(response.bids) > 0 and float(response.bids[-1][0]) > hubble_prices[1]:
@@ -21,7 +21,11 @@ async def start_hubble_feed(client: HubbleClient, market):
         if len(response.asks) > 0 and float(response.asks[0][0]) < hubble_prices[0]:
             hubble_prices[0] = float(response.asks[0][0])
 
-    await client.subscribe_to_order_book_depth_with_freq(market, callback, "500ms")
+    try:
+        await client.subscribe_to_order_book_depth_with_freq(market, callback, "500ms")
+    except Exception:
+        print("Error in start_hubble_feed")
+        restart_needed.set()
 
 async def start_binance_spot_feed(market):
     symbol = tools.getSymbolFromName(market) + "USDT"
@@ -40,7 +44,7 @@ async def start_binance_spot_feed(market):
     await client.close_connection()
 
 
-async def start_binance_futures_feed(market):
+async def start_binance_futures_feed(market, restart_needed):
     symbol = tools.getSymbolFromName(market) + "USDT"
     print(f"Starting Binance Futures price feed for {symbol}...")
     # ws_url = f"wss://fstream.binance.com/ws/{symbol.lower()}@depth@100ms"
@@ -72,4 +76,5 @@ async def start_binance_futures_feed(market):
 
         if attempt_count >= max_retries:
             print("Maximum retry attempts reached. Exiting.")
+            restart_needed.set()
             break

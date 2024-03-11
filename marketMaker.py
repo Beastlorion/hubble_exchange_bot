@@ -133,10 +133,11 @@ def generateBuyOrders(
         spread = float(l["spread"]) / 100 + defensiveSkew
         bidPrice = midPrice * (1 - spread)
         roundedBidPrice = round(bidPrice, get_price_precision(marketID))
-        best_ask_on_hubble = tools.get_hubble_prices()[0]
-        if roundedBidPrice >= best_ask_on_hubble:
-            bidPrice = best_ask_on_hubble * (1 - spread)
-            roundedBidPrice = round(bidPrice, get_price_precision(marketID))
+        if settings.get('avoidCrossing', False):
+            best_ask_on_hubble = tools.get_hubble_prices()[0]
+            if roundedBidPrice >= best_ask_on_hubble:
+                bidPrice = best_ask_on_hubble * (1 - spread)
+                roundedBidPrice = round(bidPrice, get_price_precision(marketID))
 
         amtToTrade = (availableMargin * leverage) / roundedBidPrice
         qty = getQty(l, amtToTrade, marketID)
@@ -165,10 +166,11 @@ def generateSellOrders(
         spread = float(l["spread"]) / 100 + defensiveSkew
         askPrice = midPrice * (1 + spread)
         roundedAskPrice = round(askPrice, get_price_precision(marketID))
-        best_bid_on_hubble = tools.get_hubble_prices()[1]
-        if roundedAskPrice <= best_bid_on_hubble:
-            askPrice = best_bid_on_hubble * (1 + spread)
-            roundedAskPrice = round(askPrice, get_price_precision(marketID))
+        if settings.get('avoidCrossing', False):
+            best_bid_on_hubble = tools.get_hubble_prices()[1]
+            if roundedAskPrice <= best_bid_on_hubble:
+                askPrice = best_bid_on_hubble * (1 + spread)
+                roundedAskPrice = round(askPrice, get_price_precision(marketID))
 
         amtToTrade = (availableMargin * leverage) / roundedAskPrice
         qty = getQty(l, amtToTrade, marketID) * -1
@@ -185,13 +187,18 @@ def generateSellOrders(
     return orders
 
 
-async def start_positions_feed(client: HubbleClient, wait_duration=2):
+async def start_positions_feed(client: HubbleClient, wait_duration=2, restart_needed=None):
     while True:
-        global positions
-        positions = await client.get_margin_and_positions(tools.callback)
-        now = time.time()
-        next_run = wait_duration - (now % wait_duration)
-        await asyncio.sleep(next_run)
+        try:
+            global positions
+
+            positions = await client.get_margin_and_positions(tools.callback)
+            now = time.time()
+            next_run = wait_duration - (now % wait_duration)
+            await asyncio.sleep(next_run)
+        except Exception as error:
+            print("failed to get positions", error)
+            restart_needed.set()
 
 
 async def cancelAllOrders(client, marketID):
