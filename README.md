@@ -6,14 +6,20 @@
 git clone https://github.com/hubble-exchange/beast_mm_bot
 cd beast_mm_bot
 
-# install virtualenv if not already installed
-sudo apt install python3-env
+# You will need python 3.10 to run the bot
 
-# create a new virtual environment
-python3.10 -m venv venv && source venv/bin/activate
+# Step 1 - install virtualenv if not already installed. This only needs to be done for the first time
+```sudo apt install python3-env```
 
-pip install hubble-exchange==0.9.0rc6 python-binance python-dotenv
+# Step 2 - create a new virtual environment. 
+```python3.10 -m venv venv && source venv/bin/activate```
 
+# Step 3 - To install the dependencies, use the terminal command: 
+```
+pip install -r requirements.txt setuptools pandas numpy cachetools hubble_exchange==0.9.0rc10 python-binance python-dotenv git+https://github.com/shubhamgoyal42/aio-binance-library hyperliquid-python-sdk==0.1.19
+```
+
+#Add your Credentials for managing Hubble, Binance and Hyperliquid accounts
 vi .env.secret
 ```
 
@@ -23,6 +29,10 @@ paste this with your private key/keys:
 export AVAX_PRIVATE_KEY=""
 export ETH_PRIVATE_KEY=""
 export SOL_PRIVATE_KEY=""
+export HYPERLIQUID_TRADER=""
+export HYPERLIQUID_PRIVATE_KEY=""
+export BINANCE_API_KEY=""
+export BINANCE_SECRET_KEY=""
 ```
 Then press :wq to write the file and exit the editor
 
@@ -38,7 +48,7 @@ paste this in on the last line and then type :wq to save an quit
 export PATH="/.local/bin:$PATH"
 ```
 
-Check the settings for each market in .env.shared and adjust them to your liking. The spreads are in %. So "spread":0.1 = 0.1%
+Check the settings for each market in .config.py and adjust them to your liking. The spreads are in %. So "spread":0.1 = 0.1%
 
 ## Run
 Run with your market of choice: AVAX, ETH, or SOL

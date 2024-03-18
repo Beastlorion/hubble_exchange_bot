@@ -16,10 +16,16 @@ hubble_prices = [float('inf'), 0]  # [best_ask, best_bid]
 async def start_hubble_feed(client: HubbleClient, market, restart_needed):
     async def callback(ws, response: OrderBookDepthUpdateResponse):
         global hubble_prices
-        if len(response.bids) > 0 and float(response.bids[-1][0]) > hubble_prices[1]:
-            hubble_prices[1] = float(response.bids[-1][0])
-        if len(response.asks) > 0 and float(response.asks[0][0]) < hubble_prices[0]:
-            hubble_prices[0] = float(response.asks[0][0])
+        if response.bids != None:
+            filtered_bids = list(filter(lambda x: abs(float(x[1])) > 0, response.bids))
+            sorted_bids = sorted(filtered_bids, key=lambda x: float(x[0]), reverse=True)
+            if len(sorted_bids) > 0 and float(sorted_bids[0][0]) > hubble_prices[1]:
+                hubble_prices[1] = float(sorted_bids[0][0])
+        if response.asks != None:
+            filtered_asks = list(filter(lambda x: abs(float(x[1])) > 0, response.asks))
+            sorted_asks = sorted(filtered_asks, key=lambda x: float(x[0]))
+            if len(sorted_asks) > 0 and float(sorted_asks[0][0]) < hubble_prices[0]:
+                hubble_prices[0] = float(response.asks[0][0])
 
     try:
         await client.subscribe_to_order_book_depth_with_freq(market, callback, "500ms")

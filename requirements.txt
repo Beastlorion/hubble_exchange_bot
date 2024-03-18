@@ -1,0 +1,10 @@
+setuptools
+pandas
+numpy
+cachetools
+hubble_exchange
+python-binance 
+python-dotenv
+# driftpy
+git+https://github.com/shubhamgoyal42/aio-binance-library
+git+https://github.com/bhanusanghi/hyperliquid-python-sdk.git
