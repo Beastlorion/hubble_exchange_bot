@@ -2,9 +2,8 @@ setuptools
 pandas
 numpy
 cachetools
-hubble_exchange
+hubble_exchange==0.9.0rc10
 python-binance 
 python-dotenv
-# driftpy
 git+https://github.com/shubhamgoyal42/aio-binance-library
-git+https://github.com/bhanusanghi/hyperliquid-python-sdk.git
+hyperliquid-python-sdk==0.1.19
