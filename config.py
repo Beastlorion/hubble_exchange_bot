@@ -20,19 +20,29 @@ AVAX = {
     "marginShare": 1,
     "leverage": 2,
     "refreshTolerance": 0.03,
-    "orderExpiry": 2,
+    "orderExpiry": 3,
     "defensiveSkew": 0.01,
     "priceFeed": "binance-futures",
-    "avoidCrossing": True,
+    "avoidCrossing": False,
     "orderLevels": {
-        "1": {"spread": 0.01, "qty": 2, "refreshTolerance": 0},
-        "2": {"spread": 0.02, "qty": 2, "refreshTolerance": 0},
-        "3": {"spread": 0.03, "qty": 2, "refreshTolerance": 0},
+        "1": {"spread": 0.005, "qty": 3, "refreshTolerance": 0},
+        "2": {"spread": 0.001, "qty": 4, "refreshTolerance": 0},
+        "3": {"spread": 0.002, "qty": 4, "refreshTolerance": 0},
     },
     "hedge": "hyperliquid",
     "hedgeMode": True,
     "slippage": 0.01,
-    # "maxPositionSize": 10,
+    
+    "futures_feed_frequency": 1,  # binance feed frequency
+    "mid_price_expiry": 2,  # expiry of mid price (Should be greater than binance feed frequency)
+    
+    "hedgeClient_orderbook_frequency": 5,  # binance/hyperliquid feed frequency
+    "hedgeClient_user_state_frequency": 5,  # binance/hyperliquid feed frequency
+    
+    "orderFillCooldown": 5,  # wait these many seconds before placing another order after one is filled.
+    
+    "hubblePositionPollInterval": 5,  # poll hubble for position data every x seconds
+    "position_data_expiry": 10,  # expiry of position data for hubble positions (should be greater than hubblePositionPollInterval)
 }
 
 SOL = {

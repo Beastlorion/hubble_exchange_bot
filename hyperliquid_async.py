@@ -1,4 +1,5 @@
 import asyncio
+import time
 import csv
 import json
 import os
@@ -32,6 +33,8 @@ logger = get_logger()
 
 
 class HyperLiquid:
+    price_feed_last_updated = None
+
     def __init__(
         self, market: str, settings: dict = {"desired_max_leverage": 5, "slippage": 0.5}
     ):
@@ -59,6 +62,9 @@ class HyperLiquid:
         self.session = None
         self.desired_max_leverage = settings["desired_max_leverage"]
         self.slippage = settings["slippage"]
+        self.is_price_feed_down = True
+        self.is_trader_feed_down = True
+        self.hedge_client_uptime_event = None
 
     def reset_connection(self):
         self.info = Info(constants.MAINNET_API_URL, skip_ws=False)
@@ -68,10 +74,21 @@ class HyperLiquid:
         self.trader_address = os.environ["HYPERLIQUID_TRADER"]
         self.exchange = Exchange(self.account, constants.MAINNET_API_URL)
 
-    async def start(self):
+    async def start(
+        self,
+        hedge_client_uptime_event: asyncio.Event,
+        orderbook_frequency=5,
+        user_state_frequency=5,
+    ):
+        print("Starting HyperLiquid...")
+        self.hedge_client_uptime_event = hedge_client_uptime_event
         await self.set_initial_leverage()
-        self.refresh_state_task = asyncio.create_task(self.sync_user_state())
-        self.sync_prices_task = asyncio.create_task(self.sync_prices())
+        self.refresh_state_task = asyncio.create_task(
+            self.sync_user_state(user_state_frequency)
+        )
+        self.sync_prices_task = asyncio.create_task(
+            self.sync_prices(orderbook_frequency)
+        )
         await asyncio.sleep(5)
 
     async def exit(self):
@@ -82,23 +99,30 @@ class HyperLiquid:
             self.sync_prices_task.cancel()
         await self.close_session()
 
-    def start_price_feed(self):
-        def callback(feed):
-            asyncio.run(self.update_prices(feed))
+    # def start_price_feed(self):
+    #     def callback(feed):
+    #         if self.is_price_feed_down:
+    #             self.is_price_feed_down = False
+    #             self.hedge_client_uptime_event.set()
+    #         asyncio.run(self.update_prices(feed))
 
-        self.subscription_id = self.info.subscribe(self.subscription, callback)
+    #     self.subscription_id = self.info.subscribe(self.subscription, callback)
 
-        def on_close(*args):
-            logger.error(f"@@@@ hyper on close args = {args}")
-            self.reset_connection()
+    #     def on_close(*args):
+    #         logger.error(f"@@@@ hyper on close args = {args}")
+    #         self.is_price_feed_down = True
+    #         self.hedge_client_uptime_event.clear()
+    #         self.reset_connection()
 
-        self.info.ws_manager.ws.on_close = on_close
+    #     self.info.ws_manager.ws.on_close = on_close
 
-        def on_error(*args):
-            logger.error(f"@@@@ hyper on error; args = {args}")
-            self.reset_connection()
+    #     def on_error(*args):
+    #         logger.error(f"@@@@ hyper on error; args = {args}")
+    #         self.is_price_feed_down = True
+    #         self.hedge_client_uptime_event.clear()
+    #         self.reset_connection()
 
-        self.info.ws_manager.ws.on_error = on_error
+    #     self.info.ws_manager.ws.on_error = on_error
 
     async def update_prices(self, data):
         bid_data, ask_data = data["data"]["levels"][0], data["data"]["levels"][1]
@@ -116,6 +140,8 @@ class HyperLiquid:
         )
         self.ask_prices = ask_df
         self.bid_prices = bid_df
+        self.price_feed_last_updated = time.time()
+        print("Syncing HyperLiquid update_prices...", self.price_feed_last_updated)
 
     def get_prices(self):
         return self.bid_prices.to_dict("list"), self.ask_prices.to_dict("list")
@@ -167,33 +193,54 @@ class HyperLiquid:
 
         return bid_df.px, ask_df.px
 
-    async def sync_prices(self) -> dict:
+    async def sync_prices(self, frequency) -> dict:
+        cooldown = 2
+        retry_count = 0
+        max_retries = 5
+        print("Starting HyperLiquid price sync...")
         while True:
             try:
-                start = datetime.utcnow().timestamp()
                 response = await self.post(
                     "/info", {"type": "l2Book", "coin": self.market}
                 )
+                if self.is_price_feed_down:
+                    self.is_price_feed_down = False
+                    self.hedge_client_uptime_event.set()
+                    cooldown = 2
+                    retry_count = 0
                 # print('#### sync_prices', datetime.utcnow().timestamp() - start)
                 modded_response = {"data": response}
+
                 await self.update_prices(modded_response)
-                # logger.info('#### hyper state updated')
-                # await asyncio.sleep(10)
+                logger.info("#### hyper price state updated")
+                await asyncio.sleep(frequency)
             except requests.exceptions.ConnectionError as e:
                 logger.info(f"Error: connection error in sync_prices = {e}")
+                retry_count += 1
+                if retry_count > max_retries:
+                    self.is_price_feed_down = True
+                    self.hedge_client_uptime_event.clear()
+                    self.reset_connection()
+                cooldown = 2**retry_count
                 self.reset_connection()
-                await asyncio.sleep(2)
+                await asyncio.sleep(cooldown)
 
             # except Exception as e:
             #     logger.info(f"Error: error in sync_prices = {e}")
             #     await asyncio.sleep(2)
 
-    async def sync_user_state(self) -> dict:
+    async def sync_user_state(self, user_state_frequency) -> dict:
+        print("Starting HyperLiquid user state sync...")
         while True:
             try:
+                print("Syncing HyperLiquid user state...")
                 user_state = await self.post(
                     "/info", {"type": "clearinghouseState", "user": self.trader_address}
                 )
+                if self.is_trader_feed_down:
+                    self.is_trader_feed_down = False
+                    print("setting hedge_client_uptime_event")
+                    self.hedge_client_uptime_event.set()
                 # logger.info(json.dumps(user_state, indent=4, sort_keys=True))
                 market_position = next(
                     (
@@ -228,6 +275,7 @@ class HyperLiquid:
                 leverage = float(margin_summary["totalNtlPos"]) / float(
                     margin_summary["accountValue"]
                 )
+                print(f"HyperLiquid user state sync: position size = {size}")
                 self.position_size = size
 
                 self.state = {
@@ -241,16 +289,20 @@ class HyperLiquid:
                     )
                     - float(user_state["crossMarginSummary"]["totalMarginUsed"]),
                 }
-                # logger.info('#### hyper state updated')
-                await asyncio.sleep(6)
+                logger.info("#### hyper user state updated")
+                await asyncio.sleep(user_state_frequency)
             except requests.exceptions.ConnectionError as e:
                 logger.info(f"Error: connection error in sync_user_state = {e}")
+                self.is_trader_feed_down = True
+                self.hedge_client_uptime_event.clear()
                 self.reset_connection()
-                await asyncio.sleep(10)
+                await asyncio.sleep(2)
 
             except Exception as e:
                 logger.info(f"Error: error in sync_user_state = {e}")
-                await asyncio.sleep(10)
+                self.is_trader_feed_down = True
+                self.hedge_client_uptime_event.clear()
+                await asyncio.sleep(2)
 
     def get_state(self):
         return self.state
@@ -258,7 +310,7 @@ class HyperLiquid:
     def get_mid(self):
         return (self.bid_prices.iloc[0].price + self.ask_prices.iloc[0].price) / 2
 
-    async def get_fill_price(self, size):
+    def get_fill_price(self, size):
         filled_size = 0
         current_index = 0
         price = 0
@@ -272,8 +324,9 @@ class HyperLiquid:
             current_index += 1
         return price
 
-    async def can_open_position(self, size):
-        price = await self.get_fill_price(size)
+    # @todo account for reducing position size
+    def can_open_position(self, size):
+        price = self.get_fill_price(size)
         price = with_slippage(price, self.slippage, size > 0)
         return (
             self.state["available_margin"]
@@ -289,10 +342,12 @@ class HyperLiquid:
         delay = 0.2
         filled_size = 0
         fill_price = await self.get_fill_price(size)
-        if await self.can_open_position(size):
+        if self.can_open_position(size):
             for i in range(retries):
                 try:
-                    print(f"✅✅✅✅✅✅✅✅Executing hedge trade attempt {i+1}✅✅✅✅✅✅✅")
+                    print(
+                        f"✅✅✅✅✅✅✅✅Executing hedge trade attempt {i+1}✅✅✅✅✅✅✅"
+                    )
                     order_execution_response = await self.execute_trade(
                         size - filled_size, False, fill_price, self.slippage
                     )

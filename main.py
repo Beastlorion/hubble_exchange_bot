@@ -2,16 +2,14 @@ import sys, os, asyncio, time, ast
 from hubble_exchange import HubbleClient, ConfirmationMode
 from dotenv import load_dotenv, dotenv_values
 import tools
-import price_feeds
-import marketMaker
+from price_feeds import PriceFeed
+
+# import marketMaker
 import config
 from typing import TypedDict
 from hyperliquid_async import HyperLiquid
 from binance_async import Binance
-from hubble_exchange.models import TraderFeedUpdate
-import websockets
-import cachetools
-
+from orderManager import OrderManager
 
 env = {**dotenv_values(".env.shared"), **dotenv_values(".env.secret")}
 os.environ["HUBBLE_RPC"] = env["HUBBLE_RPC"]
@@ -24,40 +22,50 @@ os.environ["HYPERLIQUID_PRIVATE_KEY"] = env["HYPERLIQUID_PRIVATE_KEY"]
 # settings = ast.literal_eval(env[sys.argv[1]])
 settings = getattr(config, sys.argv[1])
 
-marketID = None
+hubble_market_id = None
 
-restart_needed = asyncio.Event()
+# restart_needed = asyncio.Event()
 
-async def monitor_restart():
-    await restart_needed.wait()
-    print("Restarting application due to a task exception.")
-    # Implement your restart logic here, like exiting with a specific status code
-    sys.exit(1)
+# async def monitor_restart():
+#     await restart_needed.wait()
+#     print("Restarting application due to a task exception.")
+#     # Implement your restart logic here, like exiting with a specific status code
+#     sys.exit(1)
 
 hedge_client = None
 hubble_client = None
-active_order_direction = None
+
 
 async def main(market):
-    global marketID
+    global hubble_market_id
     global hedge_client
     global hubble_client
-    global active_order_direction
+
     hubble_client = HubbleClient(os.environ["PRIVATE_KEY"])
-    expiry_duration = settings["orderExpiry"]
-    active_order_direction = cachetools.TTLCache(maxsize=128, ttl=expiry_duration + 2)    monitor_task = asyncio.create_task(monitor_restart())
+    # monitor_task = asyncio.create_task(monitor_restart())
+
+    mid_price_streaming_event = asyncio.Event()
+    hubble_price_streaming_event = asyncio.Event()
+    hedge_client_uptime_event = asyncio.Event()
+    price_feed = PriceFeed()
 
     try:
         if settings["priceFeed"] == "binance-futures":
-            asyncio.create_task(price_feeds.start_binance_futures_feed(market, restart_needed))
+            print("Starting feed")
+            await price_feed.start_binance_futures_feed(
+                market, settings["futures_feed_frequency"], mid_price_streaming_event
+            )
+            print("Starting feed done")
         else:
-            asyncio.create_task(price_feeds.start_binance_spot_feed(market))
-
+            asyncio.create_task(
+                price_feed.start_binance_spot_feed(market, mid_price_streaming_event)
+            )
+        print("Getting markets")
         markets = await hubble_client.get_markets()
         marketName = settings["name"]
         assetName = marketName.split("-")[0]
-        marketID = tools.getKey(markets, marketName)
-        if settings["hedge"] == "hyperliquid" and settings["hedgeMode"]:
+        hubble_market_id = tools.getKey(markets, marketName)
+        if settings["hedgeMode"] and settings["hedge"] == "hyperliquid":
             hedge_client = HyperLiquid(
                 assetName,
                 {
@@ -65,7 +73,7 @@ async def main(market):
                     "slippage": settings["slippage"],
                 },
             )
-        elif settings["hedge"] == "binance" and settings["hedgeMode"]:
+        elif settings["hedgeMode"] and settings["hedge"] == "binance":
             hedge_client = Binance(
                 assetName + "USDT",
                 {
@@ -74,79 +82,46 @@ async def main(market):
                 },
             )
         if settings["hedgeMode"]:
-            await asyncio.create_task(hedge_client.start())
-        asyncio.create_task(price_feeds.start_hubble_feed(hubble_client, marketID, restart_needed))
-        asyncio.create_task(
-            marketMaker.start_positions_feed(hubble_client, settings["orderExpiry"], restart_needed)
+            await asyncio.create_task(
+                hedge_client.start(
+                    hedge_client_uptime_event,
+                    settings["hedgeClient_orderbook_frequency"],
+                    settings["hedgeClient_user_state_frequency"]
+                )
+            )
+
+        await price_feed.start_hubble_feed(
+            hubble_client, hubble_market_id, hubble_price_streaming_event
         )
 
-        # # get a dict of all market ids and names - for example {0: "ETH-Perp", 1: "AVAX-Perp"}
-        print(market, marketID)
-        if settings["hedgeMode"]:
-            asyncio.create_task(start_trader_feed(hubble_client))
+        order_manager = OrderManager()
+
         await asyncio.sleep(5)
-        try:
-            await marketMaker.orderUpdater(
-            hubble_client,
-            hedge_client if settings["hedgeMode"] else None,
-            marketID,
+        await order_manager.start(
+            price_feed,
+            hubble_market_id,
             settings,
-            active_order_direction
+            hubble_client,
+            hedge_client,
+            mid_price_streaming_event,
+            hubble_price_streaming_event,
+            hedge_client_uptime_event,
         )
-      
-        except Exception as e:
-            print("Error in orderUpdater", e)
-            restart_needed.set()
-            return
-        
-        await monitor_task
+
+        # except Exception as e:
+        #     print("Error in orderUpdater", e)
+        #     restart_needed.set()
+        #     return
+
+        # await monitor_task
 
     except asyncio.CancelledError:
         print("asyncio.CancelledError")
 
+
 # Start and run until complete
 loop = asyncio.get_event_loop()
 task = loop.create_task(main(sys.argv[1]))
-
-
-async def order_fill_callback(ws, response: TraderFeedUpdate):
-    global active_order_direction
-    global hedge_client
-    if response.EventName == "OrderMatched":
-        print(
-            f"✅✅✅order {response.OrderId} has been filled. fillAmount: {response.Args['fillAmount']}✅✅✅"
-        )
-        if settings["hedgeMode"]:
-            order_direction = active_order_direction.get(response.OrderId, None)
-            if(order_direction is None):
-                print(f"❌❌❌order {response.OrderId} not found in active_order_direction. Cant decide hedge direction❌❌❌")
-                return
-            await hedge_client.on_Order_Fill(response.Args["fillAmount"] * order_direction * -1)
-
-
-# async def onOrderFills(
-#     hubble_client: HubbleClient,
-# ):
-#     # listen for order fills
-#     print(
-#         "############################## Listening for order fills ##############################"
-#     )
-#     hubble_client.subscribe_to_trader_updates(ConfirmationMode.head, orderFillCallback)
-
-
-async def start_trader_feed(client):
-    while True:
-        try:
-            print("Starting trader feed...")
-            await client.subscribe_to_trader_updates(
-                ConfirmationMode.head, order_fill_callback
-            )
-        except websockets.ConnectionClosed:
-            print("@@@@ trader feed: Connection dropped; attempting to reconnect...")
-            await asyncio.sleep(5)  # Wait before attempting to reconnect
-        except Exception as e:
-            print(f"@@@@ trader feed: An error occurred: {e}")
-            break  # Exit the loop if an unexpected error occurs
 
 
 # Run until a certain condition or indefinitely
