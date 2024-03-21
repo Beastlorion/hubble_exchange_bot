@@ -72,30 +72,16 @@ class OrderManager:
         asyncio.create_task(
             self.start_trader_positions_feed(settings["hubblePositionPollInterval"])
         )
-        while True:
-            await mid_price_streaming_event.wait()
-            await hubble_price_streaming_event.wait()
-            if self.settings["hedgeMode"]:
-                await hedge_client_uptime_event.wait()
-
-            print("####### all clear #######")
-
-            if (
-                self.is_order_fill_active is False
-                or self.is_trader_position_feed_active is False
-            ):
-                print(
-                    "Hubble OrderFill feed or Trader Hubble position feed not running. Retrying in 5 seconds..."
-                )
-                await asyncio.sleep(5)
-                continue
-            # create orders
-            # this task can be on demand paused and started
-            self.create_orders_task = asyncio.create_task(await self.create_orders())
-
-    # Order specific checks:
-    # check leverage
-    # is hedgeable ??
+        # create orders
+        # this task can be on demand paused and started
+        self.create_orders_task = asyncio.create_task(
+            # @todo check if await is needed here. Needs to be removed
+            await self.create_orders(
+                mid_price_streaming_event,
+                hubble_price_streaming_event,
+                hedge_client_uptime_event,
+            )
+        )
 
     def is_stale_data(
         self,
@@ -113,8 +99,30 @@ class OrderManager:
             or time.time() - position_last_update_time > position_expiry
         )
 
-    async def create_orders(self):
+    async def create_orders(
+        self,
+        mid_price_streaming_event,
+        hubble_price_streaming_event,
+        hedge_client_uptime_event,
+    ):
         while True:
+            # check for all services to be active
+            await mid_price_streaming_event.wait()
+            await hubble_price_streaming_event.wait()
+            if self.settings["hedgeMode"]:
+                await hedge_client_uptime_event.wait()
+
+            print("####### all clear #######")
+
+            if (
+                self.is_order_fill_active is False
+                or self.is_trader_position_feed_active is False
+            ):
+                print(
+                    "Hubble OrderFill feed or Trader Hubble position feed not running. Retrying in 5 seconds..."
+                )
+                await asyncio.sleep(5)
+                continue
             print("creating orders on hubble bubble")
             # get mid price
             if self.order_fill_cooldown_triggered:

@@ -74,11 +74,85 @@ pm2 start ecosystem.config.js --only avax
 
 ## Flow
 
-1. Starts Binance price feed for asset/usdt
-2. Begins loop to get usdt/usd price from kraken
-3. Starts orderUpdater loop:
-  - Fetches all open orders for the market and cancels them
-  - Calculates prices and quantities for orders
-  - Places orders
-  - waits 5 seconds if successful. If unsuccessful try again
-4. On shutdown cancels all open orders for the market
+1. Start Mid Price feed from configured source (binance_futures/binance_spot) at settings.futures_feed_frequency
+2. If hedge mode starts hedge client (Hyperliquid or binance)
+3. Start hubble orderbook feed @ settings.hubble_orderbook_frequency
+    - onBreak
+      - clears the hubble_price_streaming_event
+      - tries reconnecting for 5 times.
+        - on successful reconnect
+          - set hubble_price_streaming_event
+        - on failure
+          - @todo report and exit application
+4. start OrderManager
+
+### OrderManager
+  Start
+    - start in background an orderfill callback listener (start_order_fill_feed) which continously listenes for updates to traders account like position updates, order fills etc.
+    - start in background trader position data and margin data update service (start_trader_positions_feed @ settings["hubblePositionPollInterval"])
+    - start create_orders service that runs @ settings["orderFrequency"]
+
+
+*start_trader_positions_feed*
+  - Update traders margin and market position data
+  - set update timestamp
+  - On Breakdown
+    - Try to reconnect.
+    - Set Flag (block create_orders service)
+    - On Reconnect 
+      - Reset Flag(resume create_orders service)
+    - Else
+      - @todo report and exit application
+
+*order_fill_callback*
+  - Check for order direction using Order_Data cache
+  - Hedge Position
+    - On Success
+      - 
+    - On Failure
+      - @todo report and exit application
+    - Finally
+      - Trigger order fill cooldown (blocks create_orders service)
+
+  - @todo store order open price and hedge price to calculate spread pnl 
+  - @todo store fee data 
+  - @todo store volume 
+
+*create_orders service*
+  - Wait for the following conditions to be true to start orderCreationTask
+  - hedge_client_uptime_event is set 
+  - mid_price_streaming_event is set 
+  - hubble_price_streaming_event is set 
+  - orderFillCooldown
+  - check if data is stale with thresholds [ , "position_data_expiry"]
+    - Binance mid_price @ settings["mid_price_expiry"]
+    - Hubble position data @ settings["position_data_expiry"]
+  - Find free margin 
+  - Update free margin for sell and buy according to current positions data and orders placed on this tick @todo -> check reserved margin data recvd from api. @todo add math info here.
+  - update bid and ask defensive skew @todo add math info here
+  - Generate bid and ask orders based on orderLevels defined in settings
+    - Check if order is hedgable. 
+      - If not skip 
+      - If is hedgable add to orders 
+  - Place created orders
+  - wait for 
+
+
+### Hedge Client
+
+  Start
+    - set market leverage to settings.leverage if no existing positions.
+    - start background process to fetch orderbook data @ settings.hedgeClient_orderbook_frequency
+      - If this breaks
+        - retries connecting for 5 times.
+          - On Successful connection restore
+            - Sets uptime_event
+          - Else 
+            - @todo report and exit application
+    - start background process to fetch user state data @ settings.hedgeClient_user_state_frequency
+      - If this breaks
+        - retries connecting for 5 times.
+          - On Successful connection restore
+            - Sets uptime_event
+          - Else 
+            - @todo report and exit application

@@ -23,17 +23,19 @@ class PriceFeed:
     binance_futures_feed_stopped = True
 
     async def start_hubble_feed(
-        self, client: HubbleClient, market, hubble_price_streaming_event
+        self, client: HubbleClient, market, freq, hubble_price_streaming_event
     ):
         print(f"Starting Hubble price feed for {market}...")
         self.hubble_market_id = market
         self.hubble_client = client
 
         asyncio.create_task(
-            self.subscribe_to_hubble_order_book(hubble_price_streaming_event)
+            self.subscribe_to_hubble_order_book(freq, hubble_price_streaming_event)
         )
 
-    async def subscribe_to_hubble_order_book(self, hubble_price_streaming_event):
+    async def subscribe_to_hubble_order_book(
+        self, hubble_orderbook_frequency, hubble_price_streaming_event
+    ):
         max_retries = 5
         attempt_count = 0
         retry_delay = 2
@@ -73,7 +75,9 @@ class PriceFeed:
         while True:
             try:
                 await self.hubble_client.subscribe_to_order_book_depth_with_freq(
-                    self.hubble_market_id, callback, "500ms"
+                    self.hubble_market_id,
+                    callback,
+                    hubble_orderbook_frequency,
                 )
             except Exception as e:
                 if attempt_count >= max_retries:

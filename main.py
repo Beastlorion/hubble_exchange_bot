@@ -88,7 +88,10 @@ async def main(market):
             )
 
         await price_feed.start_hubble_feed(
-            hubble_client, hubble_market_id, hubble_price_streaming_event
+            hubble_client,
+            hubble_market_id,
+            settings["hubble_orderbook_frequency"],
+            hubble_price_streaming_event,
         )
 
         order_manager = OrderManager()
