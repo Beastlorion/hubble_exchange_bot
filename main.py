@@ -86,17 +86,17 @@ async def main(market):
                     settings["hedgeClient_user_state_frequency"],
                 )
             )
-
-        await price_feed.start_hubble_feed(
-            hubble_client,
-            hubble_market_id,
-            settings["hubble_orderbook_frequency"],
-            hubble_price_streaming_event,
+        asyncio.create_task(
+            price_feed.start_hubble_feed(
+                hubble_client,
+                hubble_market_id,
+                settings["hubble_orderbook_frequency"],
+                hubble_price_streaming_event,
+            )
         )
-
         order_manager = OrderManager()
+        await asyncio.sleep(2)
 
-        await asyncio.sleep(5)
         await order_manager.start(
             price_feed,
             hubble_market_id,
