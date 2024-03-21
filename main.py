@@ -1,4 +1,8 @@
-import sys, os, asyncio, time, ast
+import sys
+import os
+import asyncio
+import time
+import ast
 from hubble_exchange import HubbleClient, ConfirmationMode
 from dotenv import load_dotenv, dotenv_values
 import tools
@@ -22,8 +26,8 @@ os.environ["HYPERLIQUID_PRIVATE_KEY"] = env["HYPERLIQUID_PRIVATE_KEY"]
 # settings = ast.literal_eval(env[sys.argv[1]])
 settings = getattr(config, sys.argv[1])
 
-hubble_market_id = None
 
+# @todo needs a restart needed event which should be triggered when an exception occurs in any task and is not resolved after max retries
 # restart_needed = asyncio.Event()
 
 # async def monitor_restart():
@@ -32,15 +36,8 @@ hubble_market_id = None
 #     # Implement your restart logic here, like exiting with a specific status code
 #     sys.exit(1)
 
-hedge_client = None
-hubble_client = None
-
 
 async def main(market):
-    global hubble_market_id
-    global hedge_client
-    global hubble_client
-
     hubble_client = HubbleClient(os.environ["PRIVATE_KEY"])
     # monitor_task = asyncio.create_task(monitor_restart())
 
@@ -62,12 +59,12 @@ async def main(market):
             )
         print("Getting markets")
         markets = await hubble_client.get_markets()
-        marketName = settings["name"]
-        assetName = marketName.split("-")[0]
-        hubble_market_id = tools.getKey(markets, marketName)
+        market_name = settings["name"]
+        asset_name = market_name.split("-")[0]
+        hubble_market_id = tools.get_key(markets, market_name)
         if settings["hedgeMode"] and settings["hedge"] == "hyperliquid":
             hedge_client = HyperLiquid(
-                assetName,
+                asset_name,
                 {
                     "desired_max_leverage": settings["leverage"],
                     "slippage": settings["slippage"],
@@ -75,7 +72,7 @@ async def main(market):
             )
         elif settings["hedgeMode"] and settings["hedge"] == "binance":
             hedge_client = Binance(
-                assetName + "USDT",
+                asset_name + "USDT",
                 {
                     "desired_max_leverage": settings["leverage"],
                     "slippage": settings["slippage"],
@@ -86,7 +83,7 @@ async def main(market):
                 hedge_client.start(
                     hedge_client_uptime_event,
                     settings["hedgeClient_orderbook_frequency"],
-                    settings["hedgeClient_user_state_frequency"]
+                    settings["hedgeClient_user_state_frequency"],
                 )
             )
 

@@ -63,8 +63,9 @@ class OrderManager:
         self.settings = settings
         self.hedge_client = hedge_client
         self.market = market
-        order_expiry = self.settings["orderExpiry"]
-        self.order_data = cachetools.TTLCache(maxsize=128, ttl=order_expiry + 2)
+        self.order_data = cachetools.TTLCache(
+            maxsize=128, ttl=self.settings["orderExpiry"] + 2
+        )
         self.price_feed = price_feed
         # monitor_task = asyncio.create_task(self.monitor_restart())
         asyncio.create_task(self.start_order_fill_feed())
@@ -179,7 +180,7 @@ class OrderManager:
                 quantity = int_to_scaled_float(
                     signed_orders[idx].base_asset_quantity, 18
                 )
-                if order["success"] == True:
+                if order["success"]:
                     print(f"{order['order_id']}: {quantity}@{price} : ✅")
                     self.order_data[order["order_id"]] = signed_orders[idx]
                 else:
@@ -255,7 +256,6 @@ class OrderManager:
     ):
         print("generating buy orders")
         orders = []
-        amountOnOrder = 0
         leverage = float(self.settings["leverage"])
         for level in self.settings["orderLevels"]:
             order_level = self.settings["orderLevels"][level]
@@ -312,7 +312,6 @@ class OrderManager:
     ):
         print("generating sell orders")
         orders = []
-        amountOnOrder = 0
         leverage = float(self.settings["leverage"])
         for level in self.settings["orderLevels"]:
             order_level = self.settings["orderLevels"][level]

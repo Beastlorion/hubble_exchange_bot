@@ -89,7 +89,7 @@ class PriceFeed:
                 retry_delay *= 2  # Exponential backoff
 
     async def start_binance_spot_feed(self, market, mid_price_feed_stopped_event):
-        symbol = tools.getSymbolFromName(market) + "USDT"
+        symbol = tools.get_symbol_from_name(market) + "USDT"
         client = await AsyncClient.create()
         bm = BinanceSocketManager(client)
         # start any sockets here, i.e a trade socket
@@ -105,7 +105,7 @@ class PriceFeed:
     async def start_binance_futures_feed(
         self, market, frequency, mid_price_streaming_event
     ):
-        symbol = tools.getSymbolFromName(market) + "USDT"
+        symbol = tools.get_symbol_from_name(market) + "USDT"
         print(f"Starting Binance Futures price feed for {symbol}...")
         asyncio.create_task(
             self.subscribe_to_binance_futures_feed(

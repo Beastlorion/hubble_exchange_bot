@@ -10,6 +10,7 @@ import websockets
 from aio_binance.futures.usdt import Client, WsClient
 from aio_binance.error_handler.error import BinanceException
 from loguru import logger as loguru_logger
+
 # from telegram_bot import get_telegram_bot
 from utils import get_logger, timeit, with_slippage
 
@@ -43,6 +44,7 @@ class Binance(object):
         # self.telegram = get_telegram_bot()
         self.desired_initial_leverage = settings["desired_max_leverage"]
         self.slippage = settings["slippage"]
+        self.order_depth_feed_task = None
         # disables aio_binance logs
         # loguru_logger.remove()
 
