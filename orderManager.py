@@ -32,8 +32,22 @@ class OrderManager:
     order_fill_cooldown_triggered = False
     is_order_fill_active = False
     is_trader_position_feed_active = False
-    # __init__():
-    #     pass
+
+
+    # performance_data:{
+    #     initial_margin: 0,
+    #     final_margin: 0,
+    #     total_trade_volume: 0,
+    #     total_orders_attempted: 0,
+    #     total_orders_placed: 0,
+    #     total_orders_filled: 0,
+    #     total_orders_hedged: 0,
+    #     hedge_spread_pnl: 0,
+    #     order_fee: {
+    #         making: 0,
+    #         taking: 0
+    #     }
+    # }
 
     async def start(
         self,
@@ -104,7 +118,9 @@ class OrderManager:
             print("creating orders on hubble bubble")
             # get mid price
             if self.order_fill_cooldown_triggered:
-                return
+                print("order fill cooldown triggered, skipping order creation")
+                await asyncio.sleep(self.settings["orderFrequency"])
+                continue
             self.mid_price = self.price_feed.get_mid_price()
             self.mid_price_last_updated_at = (
                 self.price_feed.get_mid_price_last_update_time()
@@ -123,7 +139,7 @@ class OrderManager:
             ):
                 # todo handle better or with config.
                 print("stale data, skipping order creation")
-                await asyncio.sleep(2)
+                await asyncio.sleep(self.settings["orderFrequency"])
                 continue
 
             free_margin_ask, free_margin_bid, defensive_skew_ask, defensive_skew_bid = (
@@ -142,13 +158,12 @@ class OrderManager:
             signed_orders = buy_orders + sell_orders
 
             if len(signed_orders) > 0:
-                print("placing orders", len(signed_orders))
-                await self.place_orders(signed_orders)
+                print(f"placing {len(signed_orders)} orders")
+                # await self.place_orders(signed_orders)
 
             # pause for expiry duration
-            await asyncio.sleep(self.settings["orderExpiry"])
+            await asyncio.sleep(self.settings["orderFrequency"])
 
-    # @todo call this function when the order is filled
     async def set_order_fill_cooldown(self):
         self.order_fill_cooldown_triggered = True
         await asyncio.sleep(self.settings["orderFillCooldown"])
@@ -167,7 +182,7 @@ class OrderManager:
                 )
                 if order["success"] == True:
                     print(f"{order['order_id']}: {quantity}@{price} : ✅")
-                    self.order_data[order["order_id"]] = signed_orders
+                    self.order_data[order["order_id"]] = signed_orders[idx]
                 else:
                     print(
                         f"{order['order_id']}: {quantity}@{price} : ❌; {order['error']}"
@@ -352,7 +367,6 @@ class OrderManager:
             return 0
 
     # For trader Positions data feed
-
     async def start_trader_positions_feed(self, poll_interval):
         while True:
             try:
@@ -382,15 +396,21 @@ class OrderManager:
                 order_data = self.order_data.get(response.OrderId, None)
                 if order_data is None:
                     print(
-                        f"❌❌❌order {response.OrderId} not found in active_order_direction. Cant decide hedge direction❌❌❌"
+                        f"❌❌❌order {response.OrderId} not found in placed_orders_data. Cant decide hedge direction❌❌❌"
                     )
                     return
-                order_direction = 1 if order_data["baseAssetQuantity"] > 0 else -1
-                await self.hedge_client.on_Order_Fill(
-                    response.Args["fillAmount"] * order_direction * -1
+                order_direction = 1 if order_data.base_asset_quantity > 0 else -1
+                print(
+                    f"hedging order fill, fillAmount: {response.Args['fillAmount']}, order_data: {order_data}"
                 )
+                try:
+                    await self.hedge_client.on_Order_Fill(
+                        response.Args["fillAmount"] * order_direction * -1
+                    )
+                except Exception as e:
+                    print(f"failed to hedge order fill: {e}")
             # @todo try to block only order creation not other operations
-            asyncio.create_task(await self.set_order_fill_cooldown())
+            await self.set_order_fill_cooldown()
 
     async def start_order_fill_feed(self):
         while True:
@@ -413,4 +433,6 @@ class OrderManager:
                 self.is_order_fill_active = False
                 # close the bot if an unexpected error occurs
                 print(f"@@@@ trader feed: An error occurred: {e}")
+                await self.set_order_fill_cooldown()
+
                 break  # Exit the loop if an unexpected error occurs

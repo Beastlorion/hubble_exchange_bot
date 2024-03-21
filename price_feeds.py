@@ -138,6 +138,10 @@ class PriceFeed:
                     while True:
                         message = await websocket.recv()
                         data = json.loads(message)
+                        print(
+                            f"data fetched at time: {time.time()} lag of {time.time() - float(data['E'])}"
+                        )
+                        print(f"binance data: {data}")
                         self.mid_price = round(
                             (float(data["b"]) + float(data["a"])) / 2, 5
                         )

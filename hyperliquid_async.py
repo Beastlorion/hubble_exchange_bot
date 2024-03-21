@@ -341,7 +341,7 @@ class HyperLiquid:
         retries = 4
         delay = 0.2
         filled_size = 0
-        fill_price = await self.get_fill_price(size)
+        fill_price = self.get_fill_price(size)
         if self.can_open_position(size):
             for i in range(retries):
                 try:
