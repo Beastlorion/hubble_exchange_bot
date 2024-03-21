@@ -33,7 +33,6 @@ class OrderManager:
     is_order_fill_active = False
     is_trader_position_feed_active = False
 
-
     # performance_data:{
     #     initial_margin: 0,
     #     final_margin: 0,
@@ -159,7 +158,7 @@ class OrderManager:
 
             if len(signed_orders) > 0:
                 print(f"placing {len(signed_orders)} orders")
-                # await self.place_orders(signed_orders)
+                await self.place_orders(signed_orders)
 
             # pause for expiry duration
             await asyncio.sleep(self.settings["orderFrequency"])
