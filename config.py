@@ -22,7 +22,7 @@ AVAX = {
     "refreshTolerance": 0.03,
     "orderFrequency": 3,
     "orderExpiry": 3,
-    "defensiveSkew": 0.01,
+    "defensiveSkew": 0,
     "priceFeed": "binance-futures",
     "avoidCrossing": False,
     "orderLevels": {

@@ -90,10 +90,6 @@ class OrderManager:
         position_last_update_time,
         position_expiry,
     ):
-        print("#############################################")
-        print(time.time() - mid_price_update_time, price_expiry)
-        print(time.time() - position_last_update_time, position_expiry)
-        print("#############################################")
         return (
             time.time() - mid_price_update_time > price_expiry
             or time.time() - position_last_update_time > position_expiry
@@ -112,7 +108,7 @@ class OrderManager:
             if self.settings["hedgeMode"]:
                 await hedge_client_uptime_event.wait()
 
-            print("####### all clear #######")
+            # print("####### all clear #######")
 
             if (
                 self.is_order_fill_active is False
@@ -123,7 +119,7 @@ class OrderManager:
                 )
                 await asyncio.sleep(5)
                 continue
-            print("creating orders on hubble bubble")
+            # print("creating orders on hubble bubble")
             # get mid price
             if self.order_fill_cooldown_triggered:
                 print("order fill cooldown triggered, skipping order creation")
@@ -136,9 +132,9 @@ class OrderManager:
             # if self.mid_price is None or self.mid_price == 0:
             #     await asyncio.sleep(2)
             #     return
-            print("mid price", self.mid_price)
-            print("mid_price_last_updated_at", self.mid_price_last_updated_at)
-            print("trader_data_last_updated_at", self.trader_data_last_updated_at)
+            # print("mid price", self.mid_price)
+            # print("mid_price_last_updated_at", self.mid_price_last_updated_at)
+            # print("trader_data_last_updated_at", self.trader_data_last_updated_at)
             if self.is_stale_data(
                 self.mid_price_last_updated_at,
                 self.settings["mid_price_expiry"],
@@ -166,7 +162,8 @@ class OrderManager:
             signed_orders = buy_orders + sell_orders
 
             if len(signed_orders) > 0:
-                print(f"placing {len(signed_orders)} orders")
+                order_time = time.strftime("%H:%M::%S")
+                print(f"placing {len(signed_orders)} orders, time - {order_time}")
                 await self.place_orders(signed_orders)
 
             # pause for expiry duration
@@ -189,12 +186,13 @@ class OrderManager:
                     signed_orders[idx].base_asset_quantity, 18
                 )
                 if order["success"]:
-                    print(f"{order['order_id']}: {quantity}@{price} : ✅")
+                    # print(f"{order['order_id']}: {quantity}@{price} : ✅")
                     self.order_data[order["order_id"]] = signed_orders[idx]
                 else:
-                    print(
-                        f"{order['order_id']}: {quantity}@{price} : ❌; {order['error']}"
-                    )
+                    # print(
+                    #     f"{order['order_id']}: {quantity}@{price} : ❌; {order['error']}"
+                    # )
+                    pass
         except Exception as error:
             print("failed to place orders", error)
 
@@ -215,7 +213,7 @@ class OrderManager:
         used_margin = total_notional / float(self.settings["leverage"])
         reserved_margin = float(self.trader_data.reservedMargin)
 
-        print(total_margin, used_margin, u_pnl, pending_funding, reserved_margin)
+        # print(total_margin, used_margin, u_pnl, pending_funding, reserved_margin)
 
         # @todo reserved margin for current open orders need to be accounted
         free_margin = (
@@ -253,8 +251,8 @@ class OrderManager:
                 / float(self.settings["leverage"])
             ) / free_margin
             defensive_skew_ask = multiple * 10 * defensive_skew / 100
-        print("margin_ask, margin_bid, defensive_skew_ask, defensive_skew_bid")
-        print(margin_ask, margin_bid, defensive_skew_ask, defensive_skew_bid)
+        # print("margin_ask, margin_bid, defensive_skew_ask, defensive_skew_bid")
+        # print(margin_ask, margin_bid, defensive_skew_ask, defensive_skew_bid)
         return (margin_ask, margin_bid, defensive_skew_ask, defensive_skew_bid)
 
     async def generate_buy_orders(
@@ -262,7 +260,7 @@ class OrderManager:
         available_margin,
         defensive_skew,
     ):
-        print("generating buy orders")
+        # print("generating buy orders")
         orders = []
         leverage = float(self.settings["leverage"])
         for level in self.settings["orderLevels"]:
@@ -318,7 +316,7 @@ class OrderManager:
         available_margin,
         defensive_skew,
     ):
-        print("generating sell orders")
+        # print("generating sell orders")
         orders = []
         leverage = float(self.settings["leverage"])
         for level in self.settings["orderLevels"]:

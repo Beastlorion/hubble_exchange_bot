@@ -36,11 +36,8 @@ class HyperLiquid:
     price_feed_last_updated = None
 
     def __init__(
-        self,
-        market: str,
-        settings: dict = {
-            "desired_max_leverage": 5,
-            "slippage": 0.5}):
+        self, market: str, settings: dict = {"desired_max_leverage": 5, "slippage": 0.5}
+    ):
         """
         Initializes the HyperLiquid class with necessary API connections and account information.
         """
@@ -55,8 +52,7 @@ class HyperLiquid:
         self.ask_prices = pd.DataFrame()
         self.bid_prices = pd.DataFrame()
 
-        self.subscription = L2BookSubscription(
-            {"type": "l2Book", "coin": self.market})
+        self.subscription = L2BookSubscription({"type": "l2Book", "coin": self.market})
         self.subscription_id = None
 
         self.position_size = 0
@@ -145,9 +141,6 @@ class HyperLiquid:
         self.ask_prices = ask_df
         self.bid_prices = bid_df
         self.price_feed_last_updated = time.time()
-        print(
-            "Syncing HyperLiquid update_prices...",
-            self.price_feed_last_updated)
 
     def get_prices(self):
         return self.bid_prices.to_dict("list"), self.ask_prices.to_dict("list")
@@ -159,8 +152,7 @@ class HyperLiquid:
                 logger.info(
                     f"Setting Hyperliquid initial leverage to {self.desired_max_leverage}."
                 )
-                self.exchange.update_leverage(
-                    self.desired_max_leverage, self.market)
+                self.exchange.update_leverage(self.desired_max_leverage, self.market)
                 logger.info(
                     f"Hyperliquid initial leverage set to {self.desired_max_leverage}."
                 )
@@ -192,22 +184,14 @@ class HyperLiquid:
         bid_data, ask_data = response["levels"]
 
         # Process bid and ask dataframes
-        bid_df = pd.DataFrame(
-            bid_data, columns=[
-                "n", "px", "sz"]).astype(float)
-        ask_df = pd.DataFrame(
-            ask_data, columns=[
-                "n", "px", "sz"]).astype(float)
+        bid_df = pd.DataFrame(bid_data, columns=["n", "px", "sz"]).astype(float)
+        ask_df = pd.DataFrame(ask_data, columns=["n", "px", "sz"]).astype(float)
 
         # Sort and select relevant data
         bid_df = (
-            bid_df.sort_values(
-                "px", ascending=False).reset_index(
-                drop=True).iloc[0]
+            bid_df.sort_values("px", ascending=False).reset_index(drop=True).iloc[0]
         )
-        ask_df = ask_df.sort_values(
-            "px", ascending=True).reset_index(
-            drop=True).iloc[0]
+        ask_df = ask_df.sort_values("px", ascending=True).reset_index(drop=True).iloc[0]
 
         return bid_df.px, ask_df.px
 
@@ -215,7 +199,6 @@ class HyperLiquid:
         cooldown = 2
         retry_count = 0
         max_retries = 5
-        print("Starting HyperLiquid price sync...")
         while True:
             try:
                 response = await self.post(
@@ -231,7 +214,7 @@ class HyperLiquid:
                 modded_response = {"data": response}
 
                 await self.update_prices(modded_response)
-                logger.info("#### hyper price state updated")
+                # logger.info("#### hyper price state updated")
                 await asyncio.sleep(frequency)
             except requests.exceptions.ConnectionError as e:
                 logger.info(f"Error: connection error in sync_prices = {e}")
@@ -249,13 +232,10 @@ class HyperLiquid:
             #     await asyncio.sleep(2)
 
     async def sync_user_state(self, user_state_frequency) -> dict:
-        print("Starting HyperLiquid user state sync...")
         while True:
             try:
-                print("Syncing HyperLiquid user state...")
                 user_state = await self.post(
-                    "/info", {"type": "clearinghouseState",
-                              "user": self.trader_address}
+                    "/info", {"type": "clearinghouseState", "user": self.trader_address}
                 )
                 if self.is_trader_feed_down:
                     self.is_trader_feed_down = False
@@ -281,24 +261,20 @@ class HyperLiquid:
                         "available_margin": float(
                             user_state["crossMarginSummary"]["accountValue"]
                         )
-                        - float(user_state["crossMarginSummary"]
-                                ["totalMarginUsed"]),
+                        - float(user_state["crossMarginSummary"]["totalMarginUsed"]),
                     }
                     # logger.info('#### hyper state updated')
                     await asyncio.sleep(10)
                     continue
                 entry_price = float(market_position["position"]["entryPx"])
                 liquidationPx = market_position["position"]["liquidationPx"]
-                liquidation_price = float(
-                    liquidationPx) if liquidationPx else float(0)
-                unrealized_pnl = float(
-                    market_position["position"]["unrealizedPnl"])
+                liquidation_price = float(liquidationPx) if liquidationPx else float(0)
+                unrealized_pnl = float(market_position["position"]["unrealizedPnl"])
                 size = float(market_position["position"]["szi"])
                 margin_summary = user_state["crossMarginSummary"]
                 leverage = float(margin_summary["totalNtlPos"]) / float(
                     margin_summary["accountValue"]
                 )
-                print(f"HyperLiquid user state sync: position size = {size}")
                 self.position_size = size
 
                 self.state = {
@@ -310,14 +286,12 @@ class HyperLiquid:
                     "available_margin": float(
                         user_state["crossMarginSummary"]["accountValue"]
                     )
-                    - float(user_state["crossMarginSummary"]
-                            ["totalMarginUsed"]),
+                    - float(user_state["crossMarginSummary"]["totalMarginUsed"]),
                 }
-                logger.info("#### hyper user state updated")
+                # logger.info("#### hyper user state updated")
                 await asyncio.sleep(user_state_frequency)
             except requests.exceptions.ConnectionError as e:
-                logger.info(
-                    f"Error: connection error in sync_user_state = {e}")
+                logger.info(f"Error: connection error in sync_user_state = {e}")
                 self.is_trader_feed_down = True
                 self.hedge_client_uptime_event.clear()
                 self.reset_connection()
@@ -333,8 +307,7 @@ class HyperLiquid:
         return self.state
 
     def get_mid(self):
-        return (self.bid_prices.iloc[0].price +
-                self.ask_prices.iloc[0].price) / 2
+        return (self.bid_prices.iloc[0].price + self.ask_prices.iloc[0].price) / 2
 
     def get_fill_price(self, size):
         filled_size = 0
@@ -384,8 +357,7 @@ class HyperLiquid:
                         break
                     else:
                         filled_size += order_execution_response["filled_quantity"]
-                        print(
-                            f"Trade partially executed. Filled size = {filled_size}.")
+                        print(f"Trade partially executed. Filled size = {filled_size}.")
                 except Exception as e:
                     print(f"Trade execution failed on attempt {i+1}: {e}")
                     # If this was the last attempt, re-raise the exception
@@ -394,15 +366,12 @@ class HyperLiquid:
                     # Wait before the next attempt
                     await asyncio.sleep(delay)
         else:
-            print(
-                f"Hedge Trade cannot be executed. Insufficient margin. Attempt {i+1}")
+            print(f"Hedge Trade cannot be executed. Insufficient margin. Attempt {i+1}")
 
     @timeit
-    async def execute_trade(
-            self, quantity, reduce_only=False, price=None, slippage=0):
+    async def execute_trade(self, quantity, reduce_only=False, price=None, slippage=0):
         if not price and not reduce_only:
-            raise ValueError(
-                "Hyperliquid: Price must be set for non-reduce only")
+            raise ValueError("Hyperliquid: Price must be set for non-reduce only")
         # Determine the trade type (buy or sell)
         side = np.sign(quantity)
         if side == 1:
@@ -429,15 +398,12 @@ class HyperLiquid:
         ]
         timestamp = get_timestamp_ms()
         grouping: Literal["na"] = "na"
-        signature_types = [
-            "(uint32,bool,uint64,uint64,bool,uint8,uint64)[]",
-            "uint8"]
+        signature_types = ["(uint32,bool,uint64,uint64,bool,uint8,uint64)[]", "uint8"]
         signature = sign_l1_action(
             self.exchange.wallet,
             signature_types,
             [
-                [order_spec_preprocessing(order_spec)
-                 for order_spec in order_specs],
+                [order_spec_preprocessing(order_spec) for order_spec in order_specs],
                 order_grouping_to_number(grouping),
             ],
             (
@@ -454,7 +420,8 @@ class HyperLiquid:
                 "type": "order",
                 "grouping": grouping,
                 "orders": [
-                    order_spec_to_order_wire(order_spec) for order_spec in order_specs],
+                    order_spec_to_order_wire(order_spec) for order_spec in order_specs
+                ],
             },
             "nonce": timestamp,
             "signature": signature,
@@ -478,8 +445,7 @@ class HyperLiquid:
         filled_quantity = 0
         try:
             filled_quantity = (
-                float(tx["response"]["data"]["statuses"]
-                      [0]["filled"]["totalSz"]) * side
+                float(tx["response"]["data"]["statuses"][0]["filled"]["totalSz"]) * side
             )
 
         except KeyError as e:
@@ -513,8 +479,7 @@ class HyperLiquid:
 
     async def get_session(self) -> aiohttp.ClientSession:
         if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession(
-                headers={"Connection": "keep-alive"})
+            self.session = aiohttp.ClientSession(headers={"Connection": "keep-alive"})
         return self.session
 
     async def post(self, url_path: str, payload: Any = None) -> Any:
@@ -553,9 +518,6 @@ class HyperLiquid:
             if "data" in err:
                 error_data = err["data"]
             raise ClientError(
-                status_code,
-                err["code"],
-                err["msg"],
-                response.headers,
-                error_data)
+                status_code, err["code"], err["msg"], response.headers, error_data
+            )
         raise ServerError(status_code, response.text)
