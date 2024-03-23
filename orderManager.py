@@ -440,51 +440,47 @@ class OrderManager:
             print(
                 f"✅✅✅order {response.OrderId} has been filled. fillAmount: {response.Args['fillAmount']}✅✅✅"
             )
-            if self.settings["hedgeMode"]:
-                order_data = self.order_data.get(response.OrderId, None)
-                # self.performance_data["maker_fee"] += response.Args["openInterestNotional"] * trading fee percentage
-                if order_data is None:
-                    print(
-                        f"❌❌❌order {response.OrderId} not found in placed_orders_data. Cant decide hedge direction❌❌❌"
-                    )
-                    return
+            order_data = self.order_data.get(response.OrderId, None)
+            # self.performance_data["maker_fee"] += response.Args["openInterestNotional"] * trading fee percentage
+            if order_data is None:
+                print(
+                    f"❌❌❌order {response.OrderId} not found in placed_orders_data. Cant decide hedge direction❌❌❌"
+                )
+                return
 
+            ## update performance data
+            self.performance_data["orders_filled"] += 1
+            self.performance_data["trade_volume"] += response.Args[
+                "fillAmount"
+            ]  # fillAmount is abs value
+            self.performance_data["cumulative_trade_volume"] += response.Args[
+                "fillAmount"
+            ]  # fillAmount is abs value
+            if self.settings["hedgeMode"]:
                 try:
+                    order_direction = 1 if order_data.base_asset_quantity > 0 else -1
                     # @todo add taker fee data here
                     avg_hedge_price = await self.hedge_client.on_Order_Fill(
                         response.Args["fillAmount"] * order_direction * -1
                     )
+                    self.performance_data["orders_hedged"] += 1
+                    instant_pnl = 0
+                    if order_direction == 1:
+                        instant_pnl = response.Args["fillAmount"] * (
+                            avg_hedge_price - response.Args["fillPrice"]
+                        )
+                    else:
+                        instant_pnl = response.Args["fillAmount"] * (
+                            response.Args["fillPrice"] - avg_hedge_price
+                        )
 
-                    ## update performance data
-                    self.performance_data["orders_filled"] += 1
-                    self.performance_data["trade_volume"] += response.Args[
-                        "fillAmount"
-                    ]  # fillAmount is abs value
-                    self.performance_data["cumulative_trade_volume"] += response.Args[
-                        "fillAmount"
-                    ]  # fillAmount is abs value
+                    self.performance_data["hedge_spread_pnl"] += instant_pnl
 
-                    order_direction = 1 if order_data.base_asset_quantity > 0 else -1
-                    print(
-                        f"hedging order fill, fillAmount: {response.Args['fillAmount']}, order_data: {order_data}"
-                    )
                 except Exception as e:
                     print(f"failed to hedge order fill: {e}")
                     self.unhandled_exception_encountered.set()
                     # exit the application
 
-            self.performance_data["orders_hedged"] += 1
-            instant_pnl = 0
-            if order_direction == 1:
-                instant_pnl = response.Args["fillAmount"] * (
-                    avg_hedge_price - response.Args["fillPrice"]
-                )
-            else:
-                instant_pnl = response.Args["fillAmount"] * (
-                    response.Args["fillPrice"] - avg_hedge_price
-                )
-
-            self.performance_data["hedge_spread_pnl"] += instant_pnl
             await self.set_order_fill_cooldown()
 
     async def start_order_fill_feed(self):
