@@ -21,6 +21,10 @@ class PriceFeed:
 
     binance_market_id = None
     binance_futures_feed_stopped = True
+    unhandled_exception_encountered = asyncio.Event()
+
+    def __init__(self, unhandled_exception_encountered):
+        self.unhandled_exception_encountered = unhandled_exception_encountered
 
     async def start_hubble_feed(
         self, client: HubbleClient, market, freq, hubble_price_streaming_event
@@ -82,7 +86,8 @@ class PriceFeed:
             except Exception as e:
                 if attempt_count >= max_retries:
                     print("Maximum retry attempts reached. Exiting price feed.")
-                    # @todo check how to bubble the exception
+                    # @todo check how to bubble the exceptionunhandled_exception_encountered
+                    self.unhandled_exception_encountered.set()
                     break
                 print("Error in start_hubble_feed err - ", e)
                 # restart hubble feed
@@ -161,8 +166,8 @@ class PriceFeed:
 
             except Exception as e:
                 if attempt_count >= max_retries:
-                    # @todo check how to bubble the exception
                     print("Maximum retry attempts reached. Exiting.")
+                    self.unhandled_exception_encountered.set()
                     break
                 mid_price_streaming_event.clear()
                 self.binance_futures_feed_stopped = True

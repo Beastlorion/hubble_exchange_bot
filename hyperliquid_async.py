@@ -36,7 +36,10 @@ class HyperLiquid:
     price_feed_last_updated = None
 
     def __init__(
-        self, market: str, settings: dict = {"desired_max_leverage": 5, "slippage": 0.5}
+        self,
+        market: str,
+        unhandled_exception_encountered: asyncio.Event,
+        settings: dict = {"desired_max_leverage": 5, "slippage": 0.5},
     ):
         """
         Initializes the HyperLiquid class with necessary API connections and account information.
@@ -65,6 +68,7 @@ class HyperLiquid:
         self.is_price_feed_down = True
         self.is_trader_feed_down = True
         self.hedge_client_uptime_event = None
+        self.unhandled_exception_encountered = unhandled_exception_encountered
 
     def reset_connection(self):
         self.info = Info(constants.MAINNET_API_URL, skip_ws=False)
@@ -216,14 +220,16 @@ class HyperLiquid:
                 # logger.info("#### hyper price state updated")
                 await asyncio.sleep(frequency)
             except requests.exceptions.ConnectionError as e:
-                logger.info(f"Error: connection error in sync_prices = {e}")
+                logger.info(
+                    f"Error: connection error in syncing hyperliquid_prices = {e}"
+                )
                 retry_count += 1
                 if retry_count > max_retries:
-                    self.is_price_feed_down = True
-                    self.hedge_client_uptime_event.clear()
-                    self.reset_connection()
-                cooldown = 2**retry_count
+                    self.unhandled_exception_encountered.set()
+                self.is_price_feed_down = True
+                self.hedge_client_uptime_event.clear()
                 self.reset_connection()
+                cooldown = 2**retry_count
                 await asyncio.sleep(cooldown)
 
             # except Exception as e:
@@ -289,6 +295,7 @@ class HyperLiquid:
                 }
                 # logger.info("#### hyper user state updated")
                 await asyncio.sleep(user_state_frequency)
+            # add max retries.
             except requests.exceptions.ConnectionError as e:
                 logger.info(f"Error: connection error in sync_user_state = {e}")
                 self.is_trader_feed_down = True
@@ -300,6 +307,7 @@ class HyperLiquid:
                 logger.info(f"Error: error in sync_user_state = {e}")
                 self.is_trader_feed_down = True
                 self.hedge_client_uptime_event.clear()
+                self.unhandled_exception_encountered.set()
                 await asyncio.sleep(2)
 
     def get_state(self):

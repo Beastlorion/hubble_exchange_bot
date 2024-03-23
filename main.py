@@ -27,25 +27,24 @@ os.environ["HYPERLIQUID_PRIVATE_KEY"] = env["HYPERLIQUID_PRIVATE_KEY"]
 settings = getattr(config, sys.argv[1])
 
 
-# @todo needs a restart needed event which should be triggered when an exception occurs in any task and is not resolved after max retries
-# restart_needed = asyncio.Event()
-
-# async def monitor_restart():
-#     await restart_needed.wait()
-#     print("Restarting application due to a task exception.")
-#     # Implement your restart logic here, like exiting with a specific status code
-#     sys.exit(1)
+async def exit_maker(unhandled_exception_encountered: asyncio.Event):
+    await unhandled_exception_encountered.wait()
+    print("Restarting application due to a unhandled task exception.")
+    # send tg notif.
+    sys.exit(1)
 
 
 async def main(market):
     hubble_client = HubbleClient(os.environ["PRIVATE_KEY"])
-    # monitor_task = asyncio.create_task(monitor_restart())
-
+    unhandled_exception_encountered = asyncio.Event()
     mid_price_streaming_event = asyncio.Event()
     hubble_price_streaming_event = asyncio.Event()
     hedge_client_uptime_event = asyncio.Event()
-    price_feed = PriceFeed()
+    price_feed = PriceFeed(unhandled_exception_encountered)
 
+    # this task manages exiting application in case of unhandled exceptions. This can be restarted with use of pm2 configuration.
+
+    monitor_task = asyncio.create_task(exit_maker(unhandled_exception_encountered))
     try:
         if settings["priceFeed"] == "binance-futures":
             print("Starting feed")
@@ -67,6 +66,7 @@ async def main(market):
             if settings["hedge"] == "hyperliquid":
                 hedge_client = HyperLiquid(
                     asset_name,
+                    unhandled_exception_encountered,
                     {
                         "desired_max_leverage": settings["leverage"],
                         "slippage": settings["slippage"],
@@ -75,6 +75,7 @@ async def main(market):
             elif settings["hedge"] == "binance":
                 hedge_client = Binance(
                     asset_name + "USDT",
+                    unhandled_exception_encountered,
                     {
                         "desired_max_leverage": settings["leverage"],
                         "slippage": settings["slippage"],
@@ -96,7 +97,7 @@ async def main(market):
                 hubble_price_streaming_event,
             )
         )
-        order_manager = OrderManager()
+        order_manager = OrderManager(unhandled_exception_encountered)
 
         await order_manager.start(
             price_feed,

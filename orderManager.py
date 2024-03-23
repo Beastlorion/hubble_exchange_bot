@@ -1,3 +1,4 @@
+from binance_async import Binance
 import asyncio
 import time
 import csv
@@ -9,7 +10,6 @@ from hubble_exchange.constants import get_minimum_quantity, get_price_precision
 from hubble_exchange.models import TraderFeedUpdate
 from hubble_exchange.utils import int_to_scaled_float
 from hyperliquid_async import HyperLiquid
-from binance_async import Binance
 import tools
 from enum import Enum
 import cachetools
@@ -35,6 +35,7 @@ class OrderManager:
     is_trader_position_feed_active = False
     save_performance_task: None
     start_time = 0
+    unhandled_exception_encountered: None
 
     performance_data = {
         "start_time": 0,
@@ -50,6 +51,9 @@ class OrderManager:
         "taker_fee": 0,
         "maker_fee": 0,
     }
+
+    def __init__(self, unhandled_exception_encountered: asyncio.Event):
+        self.unhandled_exception_encountered = unhandled_exception_encountered
 
     async def start(
         self,
@@ -111,72 +115,88 @@ class OrderManager:
         hubble_price_streaming_event,
         hedge_client_uptime_event,
     ):
+        max_retries = 5
+        attempt_count = 0
+        retry_delay = 2
         while True:
-            # check for all services to be active
-            await mid_price_streaming_event.wait()
-            await hubble_price_streaming_event.wait()
-            if self.settings["hedgeMode"]:
-                await hedge_client_uptime_event.wait()
+            try:
+                # check for all services to be active
+                await mid_price_streaming_event.wait()
+                await hubble_price_streaming_event.wait()
+                if self.settings["hedgeMode"]:
+                    await hedge_client_uptime_event.wait()
 
-            # print("####### all clear #######")
+                # print("####### all clear #######")
 
-            if (
-                self.is_order_fill_active is False
-                or self.is_trader_position_feed_active is False
-            ):
-                print(
-                    "Hubble OrderFill feed or Trader Hubble position feed not running. Retrying in 5 seconds..."
+                if (
+                    self.is_order_fill_active is False
+                    or self.is_trader_position_feed_active is False
+                ):
+                    print(
+                        "Hubble OrderFill feed or Trader Hubble position feed not running. Retrying in 5 seconds..."
+                    )
+                    await asyncio.sleep(5)
+                    continue
+                # get mid price
+                if self.order_fill_cooldown_triggered:
+                    print("order fill cooldown triggered, skipping order creation")
+                    await asyncio.sleep(self.settings["orderFrequency"])
+                    continue
+                self.mid_price = self.price_feed.get_mid_price()
+                self.mid_price_last_updated_at = (
+                    self.price_feed.get_mid_price_last_update_time()
                 )
-                await asyncio.sleep(5)
-                continue
-            # get mid price
-            if self.order_fill_cooldown_triggered:
-                print("order fill cooldown triggered, skipping order creation")
+
+                if self.is_stale_data(
+                    self.mid_price_last_updated_at,
+                    self.settings["mid_price_expiry"],
+                    self.trader_data_last_updated_at,
+                    self.settings["position_data_expiry"],
+                ):
+                    # todo handle better or with config.
+                    print("stale data, skipping order creation")
+                    await asyncio.sleep(self.settings["orderFrequency"])
+                    continue
+
+                (
+                    free_margin_ask,
+                    free_margin_bid,
+                    defensive_skew_ask,
+                    defensive_skew_bid,
+                ) = self.get_free_margin_and_defensive_skew()
+
+                buy_orders = await self.generate_buy_orders(
+                    free_margin_bid,
+                    defensive_skew_bid,
+                )
+                sell_orders = await self.generate_sell_orders(
+                    free_margin_ask,
+                    defensive_skew_ask,
+                )
+                signed_orders = []
+                signed_orders = buy_orders + sell_orders
+
+                if len(signed_orders) > 0:
+                    order_time = time.strftime("%H:%M::%S")
+                    print(f"placing {len(signed_orders)} orders, time - {order_time}")
+                    await self.place_orders(signed_orders)
+
+                attempt_count = 0
+                retry_delay = 2
                 await asyncio.sleep(self.settings["orderFrequency"])
-                continue
-            self.mid_price = self.price_feed.get_mid_price()
-            self.mid_price_last_updated_at = (
-                self.price_feed.get_mid_price_last_update_time()
-            )
-            # if self.mid_price is None or self.mid_price == 0:
-            #     await asyncio.sleep(2)
-            #     return
-            # print("mid price", self.mid_price)
-            # print("mid_price_last_updated_at", self.mid_price_last_updated_at)
-            # print("trader_data_last_updated_at", self.trader_data_last_updated_at)
-            if self.is_stale_data(
-                self.mid_price_last_updated_at,
-                self.settings["mid_price_expiry"],
-                self.trader_data_last_updated_at,
-                self.settings["position_data_expiry"],
-            ):
-                # todo handle better or with config.
-                print("stale data, skipping order creation")
-                await asyncio.sleep(self.settings["orderFrequency"])
-                continue
-
-            free_margin_ask, free_margin_bid, defensive_skew_ask, defensive_skew_bid = (
-                self.get_free_margin_and_defensive_skew()
-            )
-
-            buy_orders = await self.generate_buy_orders(
-                free_margin_bid,
-                defensive_skew_bid,
-            )
-            sell_orders = await self.generate_sell_orders(
-                free_margin_ask,
-                defensive_skew_ask,
-            )
-            signed_orders = []
-            signed_orders = buy_orders + sell_orders
-
-            if len(signed_orders) > 0:
-                order_time = time.strftime("%H:%M::%S")
-                print(f"placing {len(signed_orders)} orders, time - {order_time}")
-                await self.place_orders(signed_orders)
-
-            # pause for expiry duration
-            await asyncio.sleep(self.settings["orderFrequency"])
+            except Exception as e:
+                print(f"failed to create orders: {e}")
+                if attempt_count >= max_retries:
+                    print(
+                        "Could not start Order Creation - Maximum retry attempts reached. Exiting."
+                    )
+                    self.unhandled_exception_encountered.set()
+                    break
+                self.unhandled_exception_encountered.set()
+                attempt_count += 1
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2
+                # exit the application
 
     async def set_order_fill_cooldown(self):
         self.order_fill_cooldown_triggered = True
@@ -383,6 +403,9 @@ class OrderManager:
 
     # For trader Positions data feed
     async def start_trader_positions_feed(self, poll_interval):
+        max_retries = 5
+        attempt_count = 0
+        retry_delay = 2
         while True:
             try:
                 self.trader_data = await self.client.get_margin_and_positions(
@@ -391,11 +414,21 @@ class OrderManager:
                 if self.is_trader_position_feed_active is False:
                     self.is_trader_position_feed_active = True
                 self.trader_data_last_updated_at = time.time()
+                attempt_count = 0
+                retry_delay = 2
                 await asyncio.sleep(poll_interval)
             except Exception as error:
                 self.is_trader_position_feed_active = False
                 print("failed to get trader data", error)
-                await asyncio.sleep(poll_interval)
+                if attempt_count >= max_retries:
+                    print(
+                        "Could not start TraderPositionsFeed - Maximum retry attempts reached. Exiting."
+                    )
+                    self.unhandled_exception_encountered.set()
+                    break
+                attempt_count += 1
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2
 
     async def get_order_data(self, order_id):
         return self.order_data.get(order_id)
@@ -416,26 +449,28 @@ class OrderManager:
                     )
                     return
 
-                ## update performance data
-                self.performance_data["orders_filled"] += 1
-                self.performance_data["trade_volume"] += response.Args[
-                    "fillAmount"
-                ]  # fillAmount is abs value
-                self.performance_data["cumulative_trade_volume"] += response.Args[
-                    "fillAmount"
-                ]  # fillAmount is abs value
-
-                order_direction = 1 if order_data.base_asset_quantity > 0 else -1
-                print(
-                    f"hedging order fill, fillAmount: {response.Args['fillAmount']}, order_data: {order_data}"
-                )
                 try:
                     # @todo add taker fee data here
                     avg_hedge_price = await self.hedge_client.on_Order_Fill(
                         response.Args["fillAmount"] * order_direction * -1
                     )
+
+                    ## update performance data
+                    self.performance_data["orders_filled"] += 1
+                    self.performance_data["trade_volume"] += response.Args[
+                        "fillAmount"
+                    ]  # fillAmount is abs value
+                    self.performance_data["cumulative_trade_volume"] += response.Args[
+                        "fillAmount"
+                    ]  # fillAmount is abs value
+
+                    order_direction = 1 if order_data.base_asset_quantity > 0 else -1
+                    print(
+                        f"hedging order fill, fillAmount: {response.Args['fillAmount']}, order_data: {order_data}"
+                    )
                 except Exception as e:
                     print(f"failed to hedge order fill: {e}")
+                    self.unhandled_exception_encountered.set()
                     # exit the application
 
             self.performance_data["orders_hedged"] += 1
@@ -453,6 +488,9 @@ class OrderManager:
             await self.set_order_fill_cooldown()
 
     async def start_order_fill_feed(self):
+        max_retries = 5
+        attempt_count = 0
+        retry_delay = 2
         while True:
             try:
                 self.is_order_fill_active = True
@@ -462,19 +500,27 @@ class OrderManager:
                 await self.client.subscribe_to_trader_updates(
                     ConfirmationMode.head, self.order_fill_callback
                 )
+                retry_delay = 2
+                attempt_count = 0
 
             except websockets.ConnectionClosed:
                 self.is_order_fill_active = False
                 print(
                     "@@@@ trader feed: Connection dropped; attempting to reconnect..."
                 )
-                await asyncio.sleep(5)  # Wait before attempting to reconnect
+                if attempt_count >= max_retries:
+                    print(
+                        "Could not start OrderFillCallback - Maximum retry attempts reached. Exiting."
+                    )
+                    self.unhandled_exception_encountered.set()
+                    break
+                attempt_count += 1
+                await asyncio.sleep(retry_delay)  # Wait before attempting to reconnect
+                retry_delay *= 2  # Exponential backoff
             except Exception as e:
                 self.is_order_fill_active = False
                 # close the bot if an unexpected error occurs
-                print(f"@@@@ trader feed: An error occurred: {e}")
-                await self.set_order_fill_cooldown()
-
+                self.unhandled_exception_encountered.set()
                 break  # Exit the loop if an unexpected error occurs
 
     async def save_performance(self):
@@ -483,36 +529,42 @@ class OrderManager:
             f"performance/performance_data_market_{self.market} {self.start_time}.csv"
         )
         while True:
-            with open(filename, "a", newline="", encoding="utf-8") as csvfile:
-                # Create a CSV writer
-                writer = csv.writer(csvfile)
-                if csvfile.tell() == 0:
-                    # Write the header row
-                    writer.writerow(self.performance_data.keys())
+            try:
+                with open(filename, "a", newline="", encoding="utf-8") as csvfile:
+                    # Create a CSV writer
+                    writer = csv.writer(csvfile)
+                    if csvfile.tell() == 0:
+                        # Write the header row
+                        writer.writerow(self.performance_data.keys())
 
-                self.performance_data["end_time"] = time.strftime("%d-%m %H:%M:%S")
-                # Write the data row
-                writer.writerow(self.performance_data.values())
-                # await loop.run_in_executor(
-                #     None, writer.writerow, self.performance_data.values()
-                # )
-                # clear the performance data
-                self.performance_data = {
-                    "start_time": time.strftime("%d-%m %H:%M:%S"),
-                    "end_time": 0,
-                    "total_trade_volume": self.performance_data["total_trade_volume"],
-                    "trade_volume_in_period": 0,
-                    "orders_attempted": 0,
-                    "orders_placed": 0,
-                    "orders_filled": 0,
-                    "orders_failed": 0,
-                    "orders_hedged": 0,
-                    "hedge_spread_pnl": 0,
-                    "taker_fee": 0,
-                    "maker_fee": 0,
-                }
+                    self.performance_data["end_time"] = time.strftime("%d-%m %H:%M:%S")
+                    # Write the data row
+                    writer.writerow(self.performance_data.values())
+                    # await loop.run_in_executor(
+                    #     None, writer.writerow, self.performance_data.values()
+                    # )
+                    # clear the performance data
+                    self.performance_data = {
+                        "start_time": time.strftime("%d-%m %H:%M:%S"),
+                        "end_time": 0,
+                        "total_trade_volume": self.performance_data[
+                            "total_trade_volume"
+                        ],
+                        "trade_volume_in_period": 0,
+                        "orders_attempted": 0,
+                        "orders_placed": 0,
+                        "orders_filled": 0,
+                        "orders_failed": 0,
+                        "orders_hedged": 0,
+                        "hedge_spread_pnl": 0,
+                        "taker_fee": 0,
+                        "maker_fee": 0,
+                    }
 
-            # Sleep for a certain amount of time
-            await asyncio.sleep(
-                self.settings["performance_tracking_interval"]
-            )  # sleep for 60 seconds
+                # Sleep for a certain amount of time
+                await asyncio.sleep(
+                    self.settings["performance_tracking_interval"]
+                )  # sleep for 60 seconds
+            except Exception as e:
+                print(f"failed to save performance data: {e}")
+                self.unhandled_exception_encountered.set()

@@ -20,7 +20,8 @@ logger = get_logger()
 class Binance(object):
     def __init__(
         self,
-        market="AVAXUSDT",
+        market,
+        unhandled_exception_encountered: asyncio.Event,
         settings: dict = {"desired_max_leverage": 5, "slippage": 0.5},
     ):
         self.symbol = market
@@ -45,6 +46,7 @@ class Binance(object):
         self.desired_initial_leverage = settings["desired_max_leverage"]
         self.slippage = settings["slippage"]
         self.order_depth_feed_task = None
+        self.unhandled_exception_encountered = unhandled_exception_encountered
         # disables aio_binance logs
         # loguru_logger.remove()
 
