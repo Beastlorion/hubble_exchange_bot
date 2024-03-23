@@ -49,36 +49,37 @@ async def main(market):
     try:
         if settings["priceFeed"] == "binance-futures":
             print("Starting feed")
-            await price_feed.start_binance_futures_feed(
+            price_feed_task = await price_feed.start_binance_futures_feed(
                 market, settings["futures_feed_frequency"], mid_price_streaming_event
             )
+            # await price_feed_task
             print("Starting feed done")
         else:
             asyncio.create_task(
                 price_feed.start_binance_spot_feed(market, mid_price_streaming_event)
             )
-        print("Getting markets")
+
         markets = await hubble_client.get_markets()
         market_name = settings["name"]
         asset_name = market_name.split("-")[0]
         hubble_market_id = tools.get_key(markets, market_name)
-        if settings["hedgeMode"] and settings["hedge"] == "hyperliquid":
-            hedge_client = HyperLiquid(
-                asset_name,
-                {
-                    "desired_max_leverage": settings["leverage"],
-                    "slippage": settings["slippage"],
-                },
-            )
-        elif settings["hedgeMode"] and settings["hedge"] == "binance":
-            hedge_client = Binance(
-                asset_name + "USDT",
-                {
-                    "desired_max_leverage": settings["leverage"],
-                    "slippage": settings["slippage"],
-                },
-            )
         if settings["hedgeMode"]:
+            if settings["hedge"] == "hyperliquid":
+                hedge_client = HyperLiquid(
+                    asset_name,
+                    {
+                        "desired_max_leverage": settings["leverage"],
+                        "slippage": settings["slippage"],
+                    },
+                )
+            elif settings["hedge"] == "binance":
+                hedge_client = Binance(
+                    asset_name + "USDT",
+                    {
+                        "desired_max_leverage": settings["leverage"],
+                        "slippage": settings["slippage"],
+                    },
+                )
             await asyncio.create_task(
                 hedge_client.start(
                     hedge_client_uptime_event,
@@ -86,6 +87,7 @@ async def main(market):
                     settings["hedgeClient_user_state_frequency"],
                 )
             )
+
         asyncio.create_task(
             price_feed.start_hubble_feed(
                 hubble_client,
@@ -95,7 +97,6 @@ async def main(market):
             )
         )
         order_manager = OrderManager()
-        await asyncio.sleep(2)
 
         await order_manager.start(
             price_feed,
@@ -111,7 +112,7 @@ async def main(market):
         # except Exception as e:
         #     print("Error in orderUpdater", e)
         #     restart_needed.set()
-        #     return
+        #     returnf
 
         # await monitor_task
 

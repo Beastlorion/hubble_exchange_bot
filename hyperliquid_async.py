@@ -89,7 +89,6 @@ class HyperLiquid:
         self.sync_prices_task = asyncio.create_task(
             self.sync_prices(orderbook_frequency)
         )
-        await asyncio.sleep(5)
 
     async def exit(self):
         self.info.unsubscribe(self.subscription, self.subscription_id)

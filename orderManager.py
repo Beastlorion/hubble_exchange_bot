@@ -70,14 +70,14 @@ class OrderManager:
         )
         self.price_feed = price_feed
         # monitor_task = asyncio.create_task(self.monitor_restart())
-        asyncio.create_task(self.start_order_fill_feed())
-        asyncio.create_task(
+        t1 = asyncio.create_task(self.start_order_fill_feed())
+        t2 = asyncio.create_task(
             self.start_trader_positions_feed(settings["hubblePositionPollInterval"])
         )
-        #
-        self.save_performance_task = asyncio.create_task(
-            self.save_performance()
-        )  # create orders
+
+        # self.save_performance_task = asyncio.create_task(
+        #     self.save_performance()
+        # )  # create orders
         # this task can be on demand paused and started
         self.create_orders_task = asyncio.create_task(
             self.create_orders(
@@ -86,6 +86,9 @@ class OrderManager:
                 hedge_client_uptime_event,
             )
         )
+        print("returning tasks from order manager")
+        future = await asyncio.gather(t1, t2, self.create_orders_task)
+        return future
 
     def is_stale_data(
         self,
@@ -471,6 +474,7 @@ class OrderManager:
 
     async def save_performance(self):
         print(f"saving performance data, data: {self.performance_data}")
+
         with open(
             f"performance_data_{self.market}_{self.start_time}.csv", "w", newline=""
         ) as csvfile:
@@ -478,11 +482,15 @@ class OrderManager:
             writer = csv.writer(csvfile)
             # Write the header row
             writer.writerow(self.performance_data.keys())
+            loop = asyncio.get_running_loop()
 
             while True:
                 self.performance_data["end_time"] = time.time()
                 # Write the data row
-                writer.writerow(self.performance_data.values())
+                # writer.writerow(self.performance_data.values())
+                await loop.run_in_executor(
+                    None, writer.writerow, self.performance_data.values()
+                )
                 # clear the performance data
                 self.performance_data = {
                     "start_time": time.time(),
@@ -500,6 +508,6 @@ class OrderManager:
                 }
 
                 # Sleep for a certain amount of time
-                time.sleep(
+                await asyncio.sleep(
                     self.settings["performance_tracking_interval"]
                 )  # sleep for 60 seconds
