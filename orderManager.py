@@ -1,5 +1,6 @@
 import asyncio
 import time
+import csv
 from decimal import *
 import json
 from hexbytes import HexBytes
@@ -32,21 +33,22 @@ class OrderManager:
     order_fill_cooldown_triggered = False
     is_order_fill_active = False
     is_trader_position_feed_active = False
+    save_performance_task: None
 
-    # performance_data:{
-    #     initial_margin: 0,
-    #     final_margin: 0,
-    #     total_trade_volume: 0,
-    #     total_orders_attempted: 0,
-    #     total_orders_placed: 0,
-    #     total_orders_filled: 0,
-    #     total_orders_hedged: 0,
-    #     hedge_spread_pnl: 0,
-    #     order_fee: {
-    #         making: 0,
-    #         taking: 0
-    #     }
-    # }
+    performance_data = {
+        "start_time": 0,
+        "end_time": 0,
+        "total_trade_volume": 0,
+        "trade_volume_in_period": 0,
+        "orders_attempted": 0,
+        "orders_placed": 0,
+        "orders_filled": 0,
+        "orders_failed": 0,
+        "orders_hedged": 0,
+        "hedge_spread_pnl": 0,
+        "taker_fee": 0,
+        "maker_fee": 0,
+    }
 
     async def start(
         self,
@@ -72,11 +74,13 @@ class OrderManager:
         asyncio.create_task(
             self.start_trader_positions_feed(settings["hubblePositionPollInterval"])
         )
-        # create orders
+        #
+        self.save_performance_task = asyncio.create_task(
+            self.save_performance()
+        )  # create orders
         # this task can be on demand paused and started
         self.create_orders_task = asyncio.create_task(
-            # @todo check if await is needed here. Needs to be removed
-            await self.create_orders(
+            self.create_orders(
                 mid_price_streaming_event,
                 hubble_price_streaming_event,
                 hedge_client_uptime_event,
@@ -119,7 +123,8 @@ class OrderManager:
                 )
                 await asyncio.sleep(5)
                 continue
-            # print("creating orders on hubble bubble")
+            # store start time in 24 hour format with data and time
+            self.start_time = time.strftime("%d-%m-%Y-%H:%M:%S")
             # get mid price
             if self.order_fill_cooldown_triggered:
                 print("order fill cooldown triggered, skipping order creation")
@@ -180,19 +185,21 @@ class OrderManager:
             placed_orders = await self.client.place_signed_orders(
                 signed_orders, tools.generic_callback
             )
+            self.performance_data["orders_attempted"] += len(placed_orders)
             for idx, order in enumerate(placed_orders):
                 price = int_to_scaled_float(signed_orders[idx].price, 6)
                 quantity = int_to_scaled_float(
                     signed_orders[idx].base_asset_quantity, 18
                 )
                 if order["success"]:
-                    # print(f"{order['order_id']}: {quantity}@{price} : ✅")
+                    self.performance_data["orders_placed"] += 1
+                    print(f"{order['order_id']}: {quantity}@{price} : ✅")
                     self.order_data[order["order_id"]] = signed_orders[idx]
                 else:
-                    # print(
-                    #     f"{order['order_id']}: {quantity}@{price} : ❌; {order['error']}"
-                    # )
-                    pass
+                    self.performance_data["orders_failed"] += 1
+                    print(
+                        f"{order['order_id']}: {quantity}@{price} : ❌; {order['error']}"
+                    )
         except Exception as error:
             print("failed to place orders", error)
 
@@ -398,22 +405,43 @@ class OrderManager:
             )
             if self.settings["hedgeMode"]:
                 order_data = self.order_data.get(response.OrderId, None)
+                # self.performance_data["maker_fee"] += response.Args["openInterestNotional"] * trading fee percentage
                 if order_data is None:
                     print(
                         f"❌❌❌order {response.OrderId} not found in placed_orders_data. Cant decide hedge direction❌❌❌"
                     )
                     return
+
+                ## update performance data
+                self.performance_data["orders_filled"] += 1
+                self.performance_data["trade_volume"] += response.Args[
+                    "fillAmount"
+                ]  # fillAmount is abs value
+                self.performance_data["cumulative_trade_volume"] += response.Args[
+                    "fillAmount"
+                ]  # fillAmount is abs value
+
                 order_direction = 1 if order_data.base_asset_quantity > 0 else -1
                 print(
                     f"hedging order fill, fillAmount: {response.Args['fillAmount']}, order_data: {order_data}"
                 )
                 try:
-                    await self.hedge_client.on_Order_Fill(
+                    # @todo add taker fee data here
+                    avg_hedge_price = await self.hedge_client.on_Order_Fill(
                         response.Args["fillAmount"] * order_direction * -1
                     )
                 except Exception as e:
                     print(f"failed to hedge order fill: {e}")
-            # @todo try to block only order creation not other operations
+            instant_pnl = 0
+            if order_direction == 1:
+                instant_pnl = response.Args["fillAmount"] * (
+                    avg_hedge_price - response.Args["fillPrice"]
+                )
+            else:
+                instant_pnl = response.Args["fillAmount"] * (
+                    response.Args["fillPrice"] - avg_hedge_price
+                )
+            self.performance_data["hedge_spread_pnl"] += instant_pnl
             await self.set_order_fill_cooldown()
 
     async def start_order_fill_feed(self):
@@ -440,3 +468,38 @@ class OrderManager:
                 await self.set_order_fill_cooldown()
 
                 break  # Exit the loop if an unexpected error occurs
+
+    async def save_performance(self):
+        print(f"saving performance data, data: {self.performance_data}")
+        with open(
+            f"performance_data_{self.market}_{self.start_time}.csv", "w", newline=""
+        ) as csvfile:
+            # Create a CSV writer
+            writer = csv.writer(csvfile)
+            # Write the header row
+            writer.writerow(self.performance_data.keys())
+
+            while True:
+                self.performance_data["end_time"] = time.time()
+                # Write the data row
+                writer.writerow(self.performance_data.values())
+                # clear the performance data
+                self.performance_data = {
+                    "start_time": time.time(),
+                    "end_time": 0,
+                    "total_trade_volume": self.performance_data["total_trade_volume"],
+                    "trade_volume_in_period": 0,
+                    "orders_attempted": 0,
+                    "orders_placed": 0,
+                    "orders_filled": 0,
+                    "orders_failed": 0,
+                    "orders_hedged": 0,
+                    "hedge_spread_pnl": 0,
+                    "taker_fee": 0,
+                    "maker_fee": 0,
+                }
+
+                # Sleep for a certain amount of time
+                time.sleep(
+                    self.settings["performance_tracking_interval"]
+                )  # sleep for 60 seconds

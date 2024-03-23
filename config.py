@@ -41,6 +41,7 @@ AVAX = {
     "hubblePositionPollInterval": 5,  # poll hubble for position data every x seconds
     "position_data_expiry": 10,  # expiry of position data for hubble positions (should be greater than hubblePositionPollInterval)
     "hubble_orderbook_frequency": "500ms",
+    "performance_tracking_interval": 10,  # track performance every x seconds
 }
 
 SOL = {

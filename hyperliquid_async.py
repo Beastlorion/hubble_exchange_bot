@@ -341,6 +341,8 @@ class HyperLiquid:
         delay = 0.2
         filled_size = 0
         fill_price = self.get_fill_price(size)
+        final_avg_fill_price = 0
+        total_fee = 0
         if self.can_open_position(size):
             for i in range(retries):
                 try:
@@ -350,10 +352,15 @@ class HyperLiquid:
                     order_execution_response = await self.execute_trade(
                         size - filled_size, False, fill_price, self.slippage
                     )
+                    final_avg_fill_price += order_execution_response["price"] * (
+                        order_execution_response["filled_quantity"] / size
+                    )
+                    # total_fee += order_execution_response["trade_fee"]
                     if order_execution_response["isCompletelyFilled"]:
                         print(
                             f"Hedge Trade executed successfully on attempt {i+1}, Opened a position of size {size}."
                         )
+
                         break
                     else:
                         filled_size += order_execution_response["filled_quantity"]
@@ -365,6 +372,8 @@ class HyperLiquid:
                         raise
                     # Wait before the next attempt
                     await asyncio.sleep(delay)
+            # @todo return taker fee as well
+            return final_avg_fill_price
         else:
             print(f"Hedge Trade cannot be executed. Insufficient margin. Attempt {i+1}")
 
@@ -443,9 +452,13 @@ class HyperLiquid:
             raise e
 
         filled_quantity = 0
+        avg_fill_price = 0
         try:
             filled_quantity = (
                 float(tx["response"]["data"]["statuses"][0]["filled"]["totalSz"]) * side
+            )
+            avg_fill_price = float(
+                tx["response"]["data"]["statuses"][0]["filled"]["avgPx"]
             )
 
         except KeyError as e:
@@ -474,7 +487,9 @@ class HyperLiquid:
             "filled_quantity": filled_quantity,
             "quantity": quantity,
             "remainingQuantity": quantity - filled_quantity,
-            "price": price,
+            "price": avg_fill_price,
+            # @todo add trade fee here
+            # "trade_fee":
         }
 
     async def get_session(self) -> aiohttp.ClientSession:
