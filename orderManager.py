@@ -40,7 +40,7 @@ class OrderManager:
     performance_data = {
         "start_time": 0,
         "end_time": 0,
-        "total_trade_volume": 0,
+        "cumulative_trade_volume": 0,
         "trade_volume_in_period": 0,
         "orders_attempted": 0,
         "orders_placed": 0,
@@ -450,28 +450,28 @@ class OrderManager:
 
             ## update performance data
             self.performance_data["orders_filled"] += 1
-            self.performance_data["trade_volume"] += response.Args[
-                "fillAmount"
-            ]  # fillAmount is abs value
-            self.performance_data["cumulative_trade_volume"] += response.Args[
-                "fillAmount"
-            ]  # fillAmount is abs value
+            self.performance_data["trade_volume_in_period"] += float(
+                response.Args["fillAmount"]
+            )  # fillAmount is abs value
+            self.performance_data["cumulative_trade_volume"] += float(
+                response.Args["fillAmount"]
+            )  # fillAmount is abs value
             if self.settings["hedgeMode"]:
                 try:
                     order_direction = 1 if order_data.base_asset_quantity > 0 else -1
                     # @todo add taker fee data here
                     avg_hedge_price = await self.hedge_client.on_Order_Fill(
-                        response.Args["fillAmount"] * order_direction * -1
+                        float(response.Args["fillAmount"]) * order_direction * -1
                     )
                     self.performance_data["orders_hedged"] += 1
                     instant_pnl = 0
                     if order_direction == 1:
                         instant_pnl = response.Args["fillAmount"] * (
-                            avg_hedge_price - response.Args["fillPrice"]
+                            avg_hedge_price - response.Args["price"]
                         )
                     else:
                         instant_pnl = response.Args["fillAmount"] * (
-                            response.Args["fillPrice"] - avg_hedge_price
+                            response.Args["price"] - avg_hedge_price
                         )
 
                     self.performance_data["hedge_spread_pnl"] += instant_pnl
@@ -514,6 +514,7 @@ class OrderManager:
                 await asyncio.sleep(retry_delay)  # Wait before attempting to reconnect
                 retry_delay *= 2  # Exponential backoff
             except Exception as e:
+                print(f"failed at order fill feed: {e}")
                 self.is_order_fill_active = False
                 # close the bot if an unexpected error occurs
                 self.unhandled_exception_encountered.set()
@@ -543,8 +544,8 @@ class OrderManager:
                     self.performance_data = {
                         "start_time": time.strftime("%d-%m %H:%M:%S"),
                         "end_time": 0,
-                        "total_trade_volume": self.performance_data[
-                            "total_trade_volume"
+                        "cumulative_trade_volume": self.performance_data[
+                            "cumulative_trade_volume"
                         ],
                         "trade_volume_in_period": 0,
                         "orders_attempted": 0,

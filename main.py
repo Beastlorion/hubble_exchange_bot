@@ -31,7 +31,7 @@ async def exit_maker(unhandled_exception_encountered: asyncio.Event):
     await unhandled_exception_encountered.wait()
     print("Restarting application due to a unhandled task exception.")
     # send tg notif.
-    sys.exit(1)
+    os._exit(1)
 
 
 async def main(market):
