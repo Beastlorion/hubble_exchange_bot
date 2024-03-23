@@ -1,0 +1,4 @@
+start_time,end_time,total_trade_volume,trade_volume_in_period,orders_attempted,orders_placed,orders_filled,orders_failed,orders_hedged,hedge_spread_pnl,taker_fee,maker_fee
+0,23-03 17:17:13,0,0,0,0,0,0,0,0,0,0
+23-03 17:17:13,23-03 17:19:13,0,0,342,199,0,143,0,0,0,0
+23-03 17:19:13,23-03 17:21:13,0,0,336,217,0,119,0,0,0,0

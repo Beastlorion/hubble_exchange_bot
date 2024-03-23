@@ -34,6 +34,7 @@ class OrderManager:
     is_order_fill_active = False
     is_trader_position_feed_active = False
     save_performance_task: None
+    start_time = 0
 
     performance_data = {
         "start_time": 0,
@@ -61,6 +62,7 @@ class OrderManager:
         hubble_price_streaming_event: asyncio.Event,
         hedge_client_uptime_event: asyncio.Event,
     ):
+        self.start_time = time.strftime("%d-%m-%Y %H:%M")
         self.client = client
         self.settings = settings
         self.hedge_client = hedge_client
@@ -75,9 +77,8 @@ class OrderManager:
             self.start_trader_positions_feed(settings["hubblePositionPollInterval"])
         )
 
-        # self.save_performance_task = asyncio.create_task(
-        #     self.save_performance()
-        # )  # create orders
+        self.save_performance_task = asyncio.create_task(self.save_performance())
+
         # this task can be on demand paused and started
         self.create_orders_task = asyncio.create_task(
             self.create_orders(
@@ -87,7 +88,9 @@ class OrderManager:
             )
         )
         print("returning tasks from order manager")
-        future = await asyncio.gather(t1, t2, self.create_orders_task)
+        future = await asyncio.gather(
+            t1, t2, self.create_orders_task, self.save_performance_task
+        )
         return future
 
     def is_stale_data(
@@ -126,8 +129,6 @@ class OrderManager:
                 )
                 await asyncio.sleep(5)
                 continue
-            # store start time in 24 hour format with data and time
-            self.start_time = time.strftime("%d-%m-%Y-%H:%M:%S")
             # get mid price
             if self.order_fill_cooldown_triggered:
                 print("order fill cooldown triggered, skipping order creation")
@@ -435,6 +436,9 @@ class OrderManager:
                     )
                 except Exception as e:
                     print(f"failed to hedge order fill: {e}")
+                    # exit the application
+
+            self.performance_data["orders_hedged"] += 1
             instant_pnl = 0
             if order_direction == 1:
                 instant_pnl = response.Args["fillAmount"] * (
@@ -444,6 +448,7 @@ class OrderManager:
                 instant_pnl = response.Args["fillAmount"] * (
                     response.Args["fillPrice"] - avg_hedge_price
                 )
+
             self.performance_data["hedge_spread_pnl"] += instant_pnl
             await self.set_order_fill_cooldown()
 
@@ -474,26 +479,26 @@ class OrderManager:
 
     async def save_performance(self):
         print(f"saving performance data, data: {self.performance_data}")
+        filename = (
+            f"performance/performance_data_market_{self.market} {self.start_time}.csv"
+        )
+        while True:
+            with open(filename, "a", newline="", encoding="utf-8") as csvfile:
+                # Create a CSV writer
+                writer = csv.writer(csvfile)
+                if csvfile.tell() == 0:
+                    # Write the header row
+                    writer.writerow(self.performance_data.keys())
 
-        with open(
-            f"performance_data_{self.market}_{self.start_time}.csv", "w", newline=""
-        ) as csvfile:
-            # Create a CSV writer
-            writer = csv.writer(csvfile)
-            # Write the header row
-            writer.writerow(self.performance_data.keys())
-            loop = asyncio.get_running_loop()
-
-            while True:
-                self.performance_data["end_time"] = time.time()
+                self.performance_data["end_time"] = time.strftime("%d-%m %H:%M:%S")
                 # Write the data row
-                # writer.writerow(self.performance_data.values())
-                await loop.run_in_executor(
-                    None, writer.writerow, self.performance_data.values()
-                )
+                writer.writerow(self.performance_data.values())
+                # await loop.run_in_executor(
+                #     None, writer.writerow, self.performance_data.values()
+                # )
                 # clear the performance data
                 self.performance_data = {
-                    "start_time": time.time(),
+                    "start_time": time.strftime("%d-%m %H:%M:%S"),
                     "end_time": 0,
                     "total_trade_volume": self.performance_data["total_trade_volume"],
                     "trade_volume_in_period": 0,
@@ -507,7 +512,7 @@ class OrderManager:
                     "maker_fee": 0,
                 }
 
-                # Sleep for a certain amount of time
-                await asyncio.sleep(
-                    self.settings["performance_tracking_interval"]
-                )  # sleep for 60 seconds
+            # Sleep for a certain amount of time
+            await asyncio.sleep(
+                self.settings["performance_tracking_interval"]
+            )  # sleep for 60 seconds
