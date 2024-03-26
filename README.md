@@ -16,7 +16,7 @@ cd beast_mm_bot
 
 # Step 3 - To install the dependencies, use the terminal command: 
 ```
-pip install -r requirements.txt setuptools pandas numpy cachetools hubble_exchange==0.9.0rc10 python-binance python-dotenv git+https://github.com/shubhamgoyal42/aio-binance-library hyperliquid-python-sdk==0.1.19
+pip install -r setuptools pandas numpy cachetools hubble_exchange==0.9.0rc10 python-binance python-dotenv git+https://github.com/shubhamgoyal42/aio-binance-library hyperliquid-python-sdk==0.1.19
 ```
 
 #Add your Credentials for managing Hubble, Binance and Hyperliquid accounts
@@ -102,7 +102,7 @@ pm2 start ecosystem.config.js --only avax
     - On Reconnect 
       - Reset Flag(resume create_orders service)
     - Else
-      - @todo report and exit application
+      - reports and exit application
 
 *order_fill_callback*
   - Check for order direction using Order_Data cache
@@ -110,13 +110,13 @@ pm2 start ecosystem.config.js --only avax
     - On Success
       - 
     - On Failure
-      - @todo report and exit application
+      - report and exit application
     - Finally
       - Trigger order fill cooldown (blocks create_orders service)
 
-  - @todo store order open price and hedge price to calculate spread pnl 
+  - stores order open price and hedge price to calculate spread pnl 
   - @todo store fee data 
-  - @todo store volume 
+  - store volume in performance
 
 *create_orders service*
   - Wait for the following conditions to be true to start orderCreationTask
@@ -148,11 +148,11 @@ pm2 start ecosystem.config.js --only avax
           - On Successful connection restore
             - Sets uptime_event
           - Else 
-            - @todo report and exit application
+            - report and exit application
     - start background process to fetch user state data @ settings.hedgeClient_user_state_frequency
       - If this breaks
         - retries connecting for 5 times.
           - On Successful connection restore
             - Sets uptime_event
           - Else 
-            - @todo report and exit application
+            - report and exit application

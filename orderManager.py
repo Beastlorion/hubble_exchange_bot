@@ -14,6 +14,7 @@ import tools
 from enum import Enum
 import cachetools
 import websockets
+import os
 
 
 class OrderManager:
@@ -48,8 +49,8 @@ class OrderManager:
         "orders_failed": 0,
         "orders_hedged": 0,
         "hedge_spread_pnl": 0,
-        "taker_fee": 0,
-        "maker_fee": 0,
+        # "taker_fee": 0, @todo add this
+        # "maker_fee": 0, @todo add this
     }
 
     def __init__(self, unhandled_exception_encountered: asyncio.Event):
@@ -66,7 +67,7 @@ class OrderManager:
         hubble_price_streaming_event: asyncio.Event,
         hedge_client_uptime_event: asyncio.Event,
     ):
-        self.start_time = time.strftime("%d-%m-%Y %H:%M")
+        self.performance_data["start_time"] = time.strftime("%d-%m-%Y %H:%M")
         self.client = client
         self.settings = settings
         self.hedge_client = hedge_client
@@ -226,6 +227,7 @@ class OrderManager:
                     )
         except Exception as error:
             print("failed to place orders", error)
+            raise error
 
     # only supports cross margin mode
     def get_free_margin_and_defensive_skew(self):
@@ -419,7 +421,10 @@ class OrderManager:
                 await asyncio.sleep(poll_interval)
             except Exception as error:
                 self.is_trader_position_feed_active = False
-                print("failed to get trader data", error)
+                print(
+                    f"failed to get trader data try {attempt_count+1}/{max_retries}",
+                    error,
+                )
                 if attempt_count >= max_retries:
                     print(
                         "Could not start TraderPositionsFeed - Maximum retry attempts reached. Exiting."
@@ -522,9 +527,23 @@ class OrderManager:
 
     async def save_performance(self):
         print(f"saving performance data, data: {self.performance_data}")
-        filename = (
-            f"performance/performance_data_market_{self.market} {self.start_time}.csv"
-        )
+        filename = f"performance/performance_data_market_{self.market}.csv"
+
+        try:
+            # Check if the file exists and is not empty
+            if os.path.exists(filename) and os.path.getsize(filename) > 0:
+                # Open the file in read mode
+                with open(filename, "r", newline="", encoding="utf-8") as csvfile:
+                    # Read the last row
+                    last_row_data = list(csv.reader(csvfile))[-1]
+                    # Get the cumulative trade volume from the last row
+                    self.performance_data["cumulative_trade_volume"] = float(
+                        last_row_data[2]
+                    )
+        except Exception as e:
+            print(f"failed to read last row from performance CSV: {e}")
+            self.unhandled_exception_encountered.set()
+
         while True:
             try:
                 with open(filename, "a", newline="", encoding="utf-8") as csvfile:

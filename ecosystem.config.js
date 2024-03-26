@@ -6,9 +6,10 @@ module.exports = {
             args: "AVAX",
             log_file: "./logs/avax.log",
             instance_var: 'INSTANCE_ID',
-            autorestart: false,
             interpreter: "venv/bin/python3",
-            interpreter_args: "-u"
+            interpreter_args: "-u",
+            autorestart: true,
+            exp_backoff_restart_delay: 2000
         },
         {
             name: "eth",
