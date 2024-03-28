@@ -17,9 +17,10 @@ module.exports = {
             args: "ETH",
             log_file: "./logs/eth.log",
             instance_var: 'INSTANCE_ID',
-            autorestart: false,
             interpreter: "venv/bin/python3",
-            interpreter_args: "-u"
+            interpreter_args: "-u",
+            autorestart: true,
+            exp_backoff_restart_delay: 2000
         },
         {
             name: "sol",
@@ -27,9 +28,10 @@ module.exports = {
             args: "SOL",
             log_file: "./logs/sol.log",
             instance_var: 'INSTANCE_ID',
-            autorestart: false,
             interpreter: "venv/bin/python3",
-            interpreter_args: "-u"
+            interpreter_args: "-u",
+            autorestart: true,
+            exp_backoff_restart_delay: 2000
         },
     ]
 }

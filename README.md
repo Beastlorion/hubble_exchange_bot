@@ -21,7 +21,7 @@ cd beast_mm_bot
 # Step 3 - To install the dependencies, use the following terminal commands, ignore any errors shown for dependency package mismatch in SDKs 
 
 ```
-pip install -r setuptools pandas numpy cachetools hubble_exchange==0.9.0rc10 python-binance python-dotenv git+https://github.com/shubhamgoyal42/aio-binance-library 
+pip install setuptools pandas numpy cachetools hubble_exchange==0.9.0rc10 python-binance python-dotenv git+https://github.com/shubhamgoyal42/aio-binance-library 
 pip install hyperliquid-python-sdk==0.1.19
 pip uninstall eth-account
 pip install eth-account==0.10.0
