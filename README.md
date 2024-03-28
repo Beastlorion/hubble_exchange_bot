@@ -4,7 +4,11 @@
 
 ```
 git clone https://github.com/hubble-exchange/beast_mm_bot
+
 cd beast_mm_bot
+
+```
+
 
 # You will need python 3.10 to run the bot
 
@@ -14,14 +18,17 @@ cd beast_mm_bot
 # Step 2 - create a new virtual environment. 
 ```python3.10 -m venv venv && source venv/bin/activate```
 
-# Step 3 - To install the dependencies, use the terminal command: 
+# Step 3 - To install the dependencies, use the following terminal commands, ignore any errors shown for dependency package mismatch in SDKs 
+
 ```
-pip install -r setuptools pandas numpy cachetools hubble_exchange==0.9.0rc10 python-binance python-dotenv git+https://github.com/shubhamgoyal42/aio-binance-library hyperliquid-python-sdk==0.1.19
+pip install -r setuptools pandas numpy cachetools hubble_exchange==0.9.0rc10 python-binance python-dotenv git+https://github.com/shubhamgoyal42/aio-binance-library 
+pip install hyperliquid-python-sdk==0.1.19
+pip uninstall eth-account
+pip install eth-account==0.10.0
 ```
 
-#Add your Credentials for managing Hubble, Binance and Hyperliquid accounts
-vi .env.secret
-```
+## Add your Credentials for managing Hubble, Binance and Hyperliquid accounts
+`vi .env.secret`
 
 paste this with your private key/keys:
 
@@ -38,6 +45,7 @@ Then press :wq to write the file and exit the editor
 
 
 You may also need to add the python packages in your .bashrc file: 
+
 ```
 vi ~/.bashrc
 i
@@ -72,6 +80,7 @@ sudo npm install pm2@latest -g
 pm2 start ecosystem.config.js --only avax
 ```
 
+
 ## Flow
 
 1. Start Mid Price feed from configured source (binance_futures/binance_spot) at settings.futures_feed_frequency
@@ -83,14 +92,14 @@ pm2 start ecosystem.config.js --only avax
         - on successful reconnect
           - set hubble_price_streaming_event
         - on failure
-          - @todo report and exit application
+          - report and exit application
 4. start OrderManager
 
 ### OrderManager
   Start
-    - start in background an orderfill callback listener (start_order_fill_feed) which continously listenes for updates to traders account like position updates, order fills etc.
-    - start in background trader position data and margin data update service (start_trader_positions_feed @ settings["hubblePositionPollInterval"])
-    - start create_orders service that runs @ settings["orderFrequency"]
+  - start in background an orderfill callback listener (start_order_fill_feed) which continously listenes for updates to traders account like position updates, order fills etc.
+  - start in background trader position data and margin data update service (start_trader_positions_feed @ settings["hubblePositionPollInterval"])
+  - start create_orders service that runs @ settings["orderFrequency"]
 
 
 *start_trader_positions_feed*
@@ -108,7 +117,7 @@ pm2 start ecosystem.config.js --only avax
   - Check for order direction using Order_Data cache
   - Hedge Position
     - On Success
-      - 
+      - update performance data
     - On Failure
       - report and exit application
     - Finally
@@ -128,8 +137,11 @@ pm2 start ecosystem.config.js --only avax
     - Binance mid_price @ settings["mid_price_expiry"]
     - Hubble position data @ settings["position_data_expiry"]
   - Find free margin 
-  - Update free margin for sell and buy according to current positions data and orders placed on this tick @todo -> check reserved margin data recvd from api. @todo add math info here.
-  - update bid and ask defensive skew @todo add math info here
+  - Update free margin for sell and buy according to current positions data and orders placed on this tick 
+    @todo -> check reserved margin data recvd from api.
+    @todo add math info here.
+  - update bid and ask defensive skew 
+    @todo add math info here
   - Generate bid and ask orders based on orderLevels defined in settings
     - Check if order is hedgable. 
       - If not skip 
@@ -140,19 +152,19 @@ pm2 start ecosystem.config.js --only avax
 
 ### Hedge Client
 
-  Start
-    - set market leverage to settings.leverage if no existing positions.
-    - start background process to fetch orderbook data @ settings.hedgeClient_orderbook_frequency
-      - If this breaks
-        - retries connecting for 5 times.
-          - On Successful connection restore
-            - Sets uptime_event
-          - Else 
-            - report and exit application
-    - start background process to fetch user state data @ settings.hedgeClient_user_state_frequency
-      - If this breaks
-        - retries connecting for 5 times.
-          - On Successful connection restore
-            - Sets uptime_event
-          - Else 
-            - report and exit application
+Start
+  - set market leverage to settings.leverage if no existing positions.
+  - start background process to fetch orderbook data @ settings.hedgeClient_orderbook_frequency
+    - If this breaks
+      - retries connecting for 5 times.
+        - On Successful connection restore
+          - Sets uptime_event
+        - Else 
+          - report and exit application
+  - start background process to fetch user state data @ settings.hedgeClient_user_state_frequency
+    - If this breaks
+      - retries connecting for 5 times.
+        - On Successful connection restore
+          - Sets uptime_event
+        - Else 
+          - report and exit application
