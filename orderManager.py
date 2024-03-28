@@ -17,26 +17,7 @@ import websockets
 import os
 
 
-class OrderManager:
-    client: HubbleClient
-    market: str
-    settings: dict
-    hedge_client: HyperLiquid or Binance
-    order_data: cachetools.TTLCache
-    price_feed: None
-    trader_data: None
-    trader_data_last_updated_at: 0
-    market_position: None
-    mid_price: None
-    mid_price_last_updated_at: 0
-    position_polling_task: None
-    create_orders_task: None
-    order_fill_cooldown_triggered = False
-    is_order_fill_active = False
-    is_trader_position_feed_active = False
-    save_performance_task: None
-    start_time = 0
-    unhandled_exception_encountered: None
+class OrderManager(object):
 
     performance_data = {
         "start_time": 0,
@@ -55,6 +36,23 @@ class OrderManager:
 
     def __init__(self, unhandled_exception_encountered: asyncio.Event):
         self.unhandled_exception_encountered = unhandled_exception_encountered
+        self.client = None
+        self.market = None
+        self.settings = None
+        self.hedge_client = None
+        self.order_data = None
+        self.price_feed = None
+        self.trader_data = None
+        self.trader_data_last_updated_at = 0
+        self.market_position = None
+        self.mid_price = None
+        self.mid_price_last_updated_at = 0
+        self.position_polling_task = None
+        self.create_orders_task = None
+        self.order_fill_cooldown_triggered = False
+        self.is_order_fill_active = False
+        self.is_trader_position_feed_active = False
+        self.save_performance_task = None
 
     async def start(
         self,
@@ -204,7 +202,6 @@ class OrderManager:
         await asyncio.sleep(self.settings["orderFillCooldown"])
         self.order_fill_cooldown_triggered = False
 
-    # @todo need to add reporting tools to it.
     async def place_orders(self, signed_orders):
         try:
             placed_orders = await self.client.place_signed_orders(
@@ -258,32 +255,34 @@ class OrderManager:
         defensive_skew_ask = 0
         margin_bid = margin_allocated_for_market
         margin_ask = margin_allocated_for_market
-        if self.market_position and float(self.market_position["size"]) > 0:
-            margin_used_for_position = float(
-                float(self.market_position["notionalPosition"])
-            ) / float(self.settings["leverage"])
-            margin_ask = (free_margin + margin_used_for_position) * float(
-                self.settings["marginShare"]
-            )
-            multiple = (
-                float(self.market_position["notionalPosition"])
-                / float(self.settings["leverage"])
-            ) / free_margin
-            defensive_skew_bid = multiple * 10 * defensive_skew / 100
 
-        if self.market_position and float(self.market_position["size"]) < 0:
-            margin_used_for_position = float(
-                float(self.market_position["notionalPosition"])
-            ) / float(self.settings["leverage"])
-            # @todo check if for reduce only orders we need to add the margin_used_for_position
-            margin_bid = (free_margin + margin_used_for_position) * float(
-                self.settings["marginShare"]
-            )
-            multiple = (
-                float(self.market_position["notionalPosition"])
-                / float(self.settings["leverage"])
-            ) / free_margin
-            defensive_skew_ask = multiple * 10 * defensive_skew / 100
+        if self.market_position is not None:
+            if float(self.market_position["size"]) > 0:
+                margin_used_for_position = float(
+                    float(self.market_position["notionalPosition"])
+                ) / float(self.settings["leverage"])
+                margin_ask = (free_margin + margin_used_for_position) * float(
+                    self.settings["marginShare"]
+                )
+                multiple = (
+                    float(self.market_position["notionalPosition"])
+                    / float(self.settings["leverage"])
+                ) / free_margin
+                defensive_skew_bid = multiple * 10 * defensive_skew / 100
+
+            if float(self.market_position["size"]) < 0:
+                margin_used_for_position = float(
+                    float(self.market_position["notionalPosition"])
+                ) / float(self.settings["leverage"])
+                # @todo check if for reduce only orders we need to add the margin_used_for_position
+                margin_bid = (free_margin + margin_used_for_position) * float(
+                    self.settings["marginShare"]
+                )
+                multiple = (
+                    float(self.market_position["notionalPosition"])
+                    / float(self.settings["leverage"])
+                ) / free_margin
+                defensive_skew_ask = multiple * 10 * defensive_skew / 100
         # print("margin_ask, margin_bid, defensive_skew_ask, defensive_skew_bid")
         # print(margin_ask, margin_bid, defensive_skew_ask, defensive_skew_bid)
         return (margin_ask, margin_bid, defensive_skew_ask, defensive_skew_bid)
