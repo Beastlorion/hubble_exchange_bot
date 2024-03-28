@@ -1,20 +1,13 @@
-import price_feeds
+def get_key(d, v):
+    for key, item in d.items():
+        if item == v:
+            return key
 
-def getKey(d,v):
-  for key,item in d.items():
-    if item == v:
-      return key
-    
-def getSymbolFromName(market):
-  return market.split('-')[0]
 
-def getMidPrice(nextFundingRate):
-  return price_feeds.priceUSD
+def get_symbol_from_name(market):
+    return market.split("-")[0]
 
-async def callback(response):
-  # print(f"Received response: {response}")
-  return response
 
-async def placeOrdersCallback(response):
-  print(f"Received response: {response}")
-  return response
+async def generic_callback(response):
+    # print(f"Received response: {response}")
+    return response
